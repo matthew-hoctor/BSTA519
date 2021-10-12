@@ -1,0 +1,284 @@
+---
+title: "Homework 1 - BSTA 519"
+author: "Matthew Hoctor"
+date: "10/9/2021"
+output:
+  html_document:
+    number_sections: no
+    theme: lumen
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+#library(CarletonStats)
+#library(pwr)
+#library(BSDA)
+#library(exact2x2)
+library(car)
+#library(dvmisc)
+#library(emmeans)
+#library(gridExtra)
+#library(DescTools)
+library(DiagrammeR)
+```
+
+# Exploratory Data Analysis
+
+## a
+
+Create a profile plot of unaffected nail length vs. time for 50 group A subjects (you could use 50 randomly selected group A subjects, or first 50 group A subjects, or any 50 group A subjects of your choice) and based on the plot, comment on:
+
+1. How the mean unaffected nail length changes over time;
+2. How the variation in unaffected nail length changes over time;
+3. Whether there is any outlier in the data of your 50 subjects.
+
+Import the toenail data (NB "toe.xlsx" is Toenail.xlsx with the first 8 rows deleted)
+```{r}
+toe <- read_excel("toe.xlsx")
+```
+
+We will widen the data with the pivot_wider function, as the gather function has been superseded and is no longer developed:
+
+```{r}
+# creates a wide dataset:
+toeW <- pivot_wider(toe, id_cols = c(id,treat), names_from = time, values_from = response)
+
+# create a wide dataset with missing data omitted:
+toeWnarm <- toeW %>% drop_na()
+
+# convert missing omitted data to long:
+toeLnarm <- pivot_longer(toeWnarm, cols = c("0","1","2","3","6","9","12"), names_to = "time", values_to = "response")
+
+# convert time values back to numeric:
+toeLnarm$time <- as.numeric(toeLnarm$time)
+```
+
+first we will select the group A subjects:
+
+```{r}
+toe.A <- toe %>% filter(toe$treat == 1)
+```
+
+then we can convert this data to wide format and drop all rows with missing data:
+
+```{r}
+toe.A.wide <- pivot_wider(toe.A, id_cols = id, names_from = time, values_from = response) %>% drop_na()
+```
+
+Select first 50 columns:
+
+```{r}
+toeA50Wnarm <- toe.A.wide[1:50,]
+```
+
+Re-long-ify the data:
+
+```{r}
+toeA50Lnarm <- pivot_longer(toeA50Wnarm, cols = c("0","1","2","3","6","9","12"), names_to = "time", values_to = "response")
+toeA50Lnarm$time <- as.numeric(as.character(toeA50Lnarm$time))
+```
+
+Creating the Plot:
+
+```{r}
+ggplot(data = toeA50Lnarm,
+       mapping = aes(x = time, y = response, group = id)) +
+  geom_line() + geom_point()
+
+# using the whole dataset:
+# 
+# ggplot(data = toe[which(toe$treat==1),],
+#        mapping = aes(x = time, y = response, group = id)) +
+#   geom_line() + geom_point()
+```
+
+comment on:
+
+1. How the mean unaffected nail length changes over time;
+  + mean unaffected nail length seems to increase over time in response to terbinafine
+2. How the variation in unaffected nail length changes over time;
+  + variation in unaffected nail length seems to increase over time in response to terbinafine
+3. Whether there is any outlier in the data of your 50 subjects.
+  + there appears to be one outlier in this selection of 50 subjects, who responded much more than the rest
+
+## b
+
+Create a profile plot of mean unaffected nail length vs. time for group A and Group B. Based on the plot, comment on:
+
+1. How the mean unaffected nail length changes over time for each group and whether there is any obvious pattern.
+2. Whether the trend of mean unaffected nail length over time is the same for the two groups.
+
+Creating the plot (note that itraconazole appears on the left, and terbinafine on the right):
+
+```{r}
+ggplot(data = toe,
+       mapping = aes(x = time, y = response, group = id)) +
+  geom_line() + geom_point() +
+  facet_grid(. ~ treat)
+```
+
+Based on the plot, comment on:
+
+1. How the mean unaffected nail length changes over time for each group and whether there is any obvious pattern.
+  + The pattern in each group is that unaffected nail length increase.
+2. Whether the trend of mean unaffected nail length over time is the same for the two groups.
+  + It is not clear from these plots which has a greater increase.
+
+## c
+
+Create a scatter plot of unaffected nail length vs. time and add a lowess curve for group A and group B, separately and comment on the trend of mean unaffected nail length over time for each group.
+
+Creating the plot with lowess curve (note that itraconazole appears on the left, and terbinafine on the right):
+
+```{r}
+ggplot(data = toe,
+       mapping = aes(x = time, y = response, group = id)) +
+  geom_line() + geom_point() +
+  facet_grid(. ~ treat) +
+  stat_smooth(aes(group = 1))
+```
+
+Comment: again it is not clear if there is any difference in mean unaffected nail length between these two treatments.
+
+## d
+
+Create a scatter plot matrix of the repeated measurements over time and comment on how the correlation among the repeated measurements changes over time.
+
+```{r}
+# first we can make a wide dataset with non-numeric column names:
+toeWt <- pivot_wider(toe, id_cols = c(id,treat), names_from = time, values_from = response, names_prefix = "t")
+
+# then we can create the scatterplot matrix with the pairs function:
+pairs(~ t0 + t1 + t2 + t3 + t6 + t9 + t12, data = toeWt)
+```
+
+As expected from the examples given in class, and as we would expect intuitively, correlation decreases among the given measures over time.
+
+# Simple Longitudinal Data Analysis
+
+## e
+
+Fit an appropriate model to answer the following questions and interpret your results. Write out the model and specify the null vs. alternative hypotheses for each question.
+
+1. Does the change of unaffected nail length from baseline to month 1 equal to
+zero for the Itraconazol group?
+2. Does the change of unaffected nail length from baseline to month 1 differ
+between the two groups?
+
+These questions are most appropriately answered by change score analysis, where $\delta_{i}=y_{i1}-y_{i0}$ is defined as the difference in unaffected nail length from $t=0$ ($y_{i0}$) time $t=1$ ($y_{i1}$).
+
+For questions 1 & 2, the model can be expressed as:
+
+$$\delta_i = \beta_0 + \beta_1x_i + \varepsilon_i$$
+Where $x_i$ is the treatment group variable (0 for itraconazole; 1 for terbinafine).
+
+This model yields two null hypotheses for the questions above; for question 1:
+
+$$H_0: \beta_0 = 0$$
+
+For question 2:
+
+$$H_0: \beta_1=0$$
+
+The following code performs the change score analysis:
+
+```{r}
+diff <- toeWt$t1 - toeWt$t0
+toe_model <- lm(diff~ toeWt$treat)
+summary(toe_model)
+```
+
+We can therefore reject $H_0$ for question 1, and fail to reject $H_0$ for question 2; the change in unaffected nail length from baseline to one month significantly differs from the null, but there is not a significant difference in change from baseline to one mohtn between both treatment gorups.
+
+## f
+
+Fit an appropriate model to answer the following questions and interpret your results. Write out the model and specify the null vs. alternative hypotheses for each question.
+
+1. Does the unaffected nail length at month 1 differ between the two groups
+after adjusting for baseline difference in unaffected nail length?
+2. Is the unaffected nail length at month 1 related to the baseline unaffected
+nail length after adjusting for group difference?
+
+Note: Make sure to answer the questions AND interpret your results including
+providing basis (such as results of hypothesis testing, estimates of difference or
+change and its 95% CI) for your answers, and attach appropriate output if you want.
+
+These questions are best answered through anslysis of covariance of post- intervention score using pre-intervention score as a covariate; thus an appropriate model for these questions can be expressed as:
+
+$$y_{i1} = \beta_0 + \beta_1 x_i + \beta_2 y_{i0} + \varepsilon_i$$
+
+Where $x_i$ is the treatment group variable (0 for itraconazole; 1 for terbinafine).
+
+This model yields two null hypotheses for the questions above; for question 1:
+
+$$H_0: \beta_1 = 0$$
+
+For question 2:
+
+$$H_0: \beta_2=0$$
+
+The following code performs the ANCOVA analysis:
+
+```{r}
+toe_ANCOVA <- lm(t1 ~ treat + t0, data = toeWt)
+summary(toe_ANCOVA)
+```
+
+We can therefore fail to reject $H_0$ for question 1, and reject $H_0$ for question 2; the change in unaffected nail length at 1 month after adjusting for baseline difference does not appear to differ between treatment groups, however after adjusting for treatment group difference unaffected nail length at one month appears related to baseline after adjusting for group differnce.
+
+# Lord's Paradox
+
+## 1
+
+What is Lord’s paradox? Why could the paradox occur?
+
+Lord's paradox occurs during the analysis of different groups in a before vs after designed study when the t-test of the difference in before vs after produces a different result than those produced by ANCOVA with adjustment for initial scores.
+
+This apparent paradox can occur when ANCOVA and t-test models have two fundamentally different sets of causal assumptions, and thus address two different questions.  Pearl's conceptualization of the initial measurement as a mediator of the effect of the exposure on the final measurement illustrates this difference.<sup>1</sup>  If we consider Glymour et al's example of the effect of educational attainment on cognitive change with cognitive abilities measured at baseline and then again at the end of the experiment,<sup>2</sup> we can use Pearl's mediation framework to conceptualize initial cognitive ability as a mediator of the effect of education on final cognitive ability.  This suggests the ANCOVA approach asseses a causal effect of education on final cognitive ability, and adjustment can be made for initial cognitive ability if it is assumed that it is not a mediator; whereas the t-test analysis can assess a causal effect of the exposure on the difference in measurements.
+
+Clark illustrates this framework with the following directed acyclic graph:<sup>3</sup>
+
+```{r dag1, echo = FALSE}
+grViz("
+digraph dag1 {
+  # a 'graph' statement
+  graph [fontsize = 10, layout=circo] #rankdir ignored for circo
+  # several 'node' statements
+  Change[shape = doublecircle, fontname = Helvetica, fontcolor='gray50', fillcolor='gray95', width=1, penwidth=0.2];
+  node [shape = box, fontname = Helvetica, fontcolor='gray50', style=filled, penwidth=0]
+  Exposure[color=lightsalmon]; 
+  Initial[color=navajowhite]; 
+  Final[color=navajowhite]; 
+  # edge statements
+  Exposure -> Initial[label='a' fontcolor='gray25'  color='dodgerblue'] 
+  Exposure->Final [label='b' fontcolor='gray25'  color='darkred']
+  Initial->Final [label='c' fontcolor='gray25'  color='dodgerblue']
+  Initial->Change [label='-1' color='gray75' fontcolor='gray25'  ]
+  Final->Change [label='+1' color='gray75' fontcolor='gray25'  ]
+}
+")
+
+```
+
+## 2
+
+Under what conditions is ANCOVA model appropriate to use? Under what conditions is ANCOVA model NOT appropriate to use?
+
+The above discussion of the origins of Lord's paradox as improper adjustment for a mediator suggests conditions for apropriate use of ANCOVA vs t-test approaches.  If we consider Wright's given example of supplementary instruction (SI) on arethemetic test attainment,<sup>4</sup> then ANCOVA can be used, as when the first measurement cannot be said to mediate the exposure-outcome relation.  Wright further notes that "(t test) asks whether the average gain in score is different for the two groups... (ANCOVA) asks whether the average gain, partialling out pre-scores, is different between the two groups".  This subtle distinction illustrates that there remains a slight difference in approach, even when mediation issues have been resolved.
+
+# References
+
+1. Pearl J. Lord’s Paradox Revisited – (Oh Lord! Kumbaya!). Journal of Causal Inference. 2016;4(2). doi:10.1515/jci-2016-0021
+2. Glymour MM, Weuve J, Berkman LF, Kawachi I, Robins JM. When Is Baseline Adjustment Useful in Analyses of Change? An Example with Education and Cognitive Change. American Journal of Epidemiology. 2005;162(3):267-278. doi:10.1093/aje/kwi187
+3. Clark M. Lord’s Paradox.; 2019. Accessed October 11, 2021. https://github.com/m-clark/lords-paradox
+4. Wright DB. Comparing groups in a before-after design: When t test and ANCOVA produce different results. British Journal of Educational Psychology. 2006;76(3):663-675. doi:10.1348/000709905X52210

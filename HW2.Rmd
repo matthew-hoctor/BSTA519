@@ -32,6 +32,33 @@ library(car)
 library(DiagrammeR)
 ```
 
-# Exploratory Data Analysis
+Toenail Data: Response Profile Analysis
 
-## a
+# a
+
+## 1
+
+
+
+## 2
+
+
+
+## 3
+
+
+
+# b
+
+
+
+# c
+
+
+
+# d
+
+
+
+# e
+

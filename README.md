@@ -5,6 +5,9 @@ A place to upload BSTA 519 homework
 # Homework
 
  * [HW1](https://matthew-hoctor.github.io/BSTA519/HW1): [assignment 1 pdf pdf](https://github.com/matthew-hoctor/BSTA519/blob/main/BSTA519%20homework%201%20-%20Fall%202021.pdf)
+   * [Glymour paper](https://github.com/matthew-hoctor/BSTA519/blob/main/Glymour%20baseline-adjustment.pdf)
+   * [Wright paper](https://github.com/matthew-hoctor/BSTA519/blob/main/Wright%20Lord_s%20paradox.pdf)
+ * [HW2](https://matthew-hoctor.github.io/BSTA519/HW2): [assignment 1 pdf pdf](https://github.com/matthew-hoctor/BSTA519/blob/main/BSTA519%20homework%202%202021.pdf)
  
 # Resources
 

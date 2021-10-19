@@ -90,13 +90,20 @@ Calculate group differences at each time point after subtracting the baseline re
 
 We can use the above reported regression coefficients to calculate the differences; $\Delta_k = \beta_1 + \beta_{1k}$ for $k = 1,2,3,...7$  ($\beta_{11}=0$):
 
- * $\Delta_1 = \beta_1 = $ 0.398144
- * $\Delta_1 = \beta_1  + \beta_{12}= $ 0.398144 + -0.072497 = 0.325647
- * $\Delta_1 = \beta_1  + \beta_{13}= $ 0.398144 + -0.068974 = 0.32917
- * $\Delta_1 = \beta_1  + \beta_{14}= $ 0.398144 + -0.168894 = 0.229254
- * $\Delta_1 = \beta_1  + \beta_{15}= $ 0.398144 + -0.097182 = 0.300962
- * $\Delta_1 = \beta_1  + \beta_{16}= $ 0.398144 + 0.391843 = 0.789987
- * $\Delta_1 = \beta_1  + \beta_{17}= $ 0.398144 + 0.512978 = 0.911122
+ * $\Delta_1 = \beta_1$ = 0.398144
+
+ * $\Delta_2 = \beta_1  + \beta_{12}$ = 0.398144 + -0.072497 = 0.325647
+
+ * $\Delta_3 = \beta_1  + \beta_{13}$ = 0.398144 + -0.068974 = 0.32917
+
+ * $\Delta_4 = \beta_1  + \beta_{14}$ = 0.398144 + -0.168894 = 0.229254
+
+ * $\Delta_5 = \beta_1  + \beta_{15}$ = 0.398144 + -0.097182 = 0.300962
+
+ * $\Delta_6 = \beta_1  + \beta_{16}$ = 0.398144 + 0.391843 = 0.789987
+
+ * $\Delta_7 = \beta_1  + \beta_{17}$ = 0.398144 + 0.512978 = 0.911122
+
 
 ## 3
 

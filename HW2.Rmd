@@ -19,46 +19,125 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(readxl)
 library(tidyverse)
-library(ggplot2)
+#library(ggplot2)
 #library(CarletonStats)
 #library(pwr)
 #library(BSDA)
 #library(exact2x2)
-library(car)
+#library(car)
 #library(dvmisc)
 #library(emmeans)
 #library(gridExtra)
 #library(DescTools)
-library(DiagrammeR)
+#library(DiagrammeR)
+library(nlme)
+library(doBy)
 ```
 
 Toenail Data: Response Profile Analysis
 
+# Data import code from HW1
+
+```{r}
+toe <- read_excel("toe.xlsx")
+```
+
 # a
+
+Test the hypothesis whether the changes in the mean unaffected nail length are the same for the two treatment groups.
 
 ## 1
 
+Write down your model for testing this hypothesis, perform the test and interpret your results.
 
+The model used to test "hypothesis 1", the similarity of mean response profiles between the terbinafine and itraconazole groups can be expressed as:
+
+$$y_{ij} = \beta_0 + \beta_1 x_i + \beta_2 t_{0j} + \beta_3 t_{1j} + \beta_4 t_{2j} + \beta_5 t_{3j} + \beta_6 t_{6j} + \beta_7 t_{9j} + \\ \beta_{12} x_i t_{0j} + \beta_{13} x_i t_{1j} + \beta_{14} x_i t_{2j} + \beta_{15} x_i t_{3j} + \beta_{16} x_i t_{6j} + \beta_{17} x_i t_{9j} + \varepsilon_{ij}$$
+
+Where $y_{ij}$ denotes observed unaffected nail length in treatment group $i$ for subject $j$; $x_i = 0$ for itraconazole and $x_i = 1$ for terbinafine; $t_{kj} = 1$ at time $k = 0, 1, 2, 3, 6, 9, 12$ months and $t_{kj} = 1$ otherwise; and $\varepsilon_{ij}$ denotes the error term for the observation.  We can express the null hypothesis for hypothesis 1 as:
+
+$$H_{01}: \beta_{1k} = 0$$
+
+For $k = 2,3,...7$.
+
+We can now perform the hypothesis test.  First we can create new factored variables for time and treatment category:
+
+, levels = c(0,1,2,3,6,9,12), labels = c(1,2,3,4,5,6,7)
+
+```{r}
+toe$time.f <- factor(toe$time, levels = c(0,1,2,3,6,9,12), labels = c(1,2,3,4,5,6,7))
+toe$treat.f <- factor(toe$treat)
+toe$time <- as.numeric(toe$time)
+toe$timef <- as.numeric(toe$time.f)
+```
+
+```{r}
+```
+
+
+Making the model:
+
+```{r}
+toe_RP <- gls(response ~ time.f * treat.f, data = toe, corr=corSymm(form= ~ timef| id), weights = varIdent(form = ~ 1 | time.f))
+summary(toe_RP)
+```
+
+We can see from the above results that each of the p-values for the $\beta_{1k}$ are above the 0.05 threashold, and are not significant; thus we fail to reject $H_{01}$.
 
 ## 2
 
+Calculate group differences at each time point after subtracting the baseline response and interpret your results.
 
+We can use the above reported regression coefficients to calculate the differences; $\Delta_k = \beta_1 + \beta_{1k}$ for $k = 1,2,3,...7$  ($\beta_{11}=0$):
+
+ * $\Delta_1 = \beta_1 = $ 0.398144
+ * $\Delta_1 = \beta_1  + \beta_{12}= $ 0.398144 + -0.072497 = 0.325647
+ * $\Delta_1 = \beta_1  + \beta_{13}= $ 0.398144 + -0.068974 = 0.32917
+ * $\Delta_1 = \beta_1  + \beta_{14}= $ 0.398144 + -0.168894 = 0.229254
+ * $\Delta_1 = \beta_1  + \beta_{15}= $ 0.398144 + -0.097182 = 0.300962
+ * $\Delta_1 = \beta_1  + \beta_{16}= $ 0.398144 + 0.391843 = 0.789987
+ * $\Delta_1 = \beta_1  + \beta_{17}= $ 0.398144 + 0.512978 = 0.911122
 
 ## 3
 
+Calculate the overall (average) group difference after subtracting the baseline response and interpret your results.
 
+The following code can be used to calculate the average group-difference post-treatment change from baseline:
+
+```{r}
+m1 <- c(0,0,0,0,0,0,0,0,1/6,1/6,1/6,1/6,1/6,1/6)
+#options(scipen = 999, digits = 6) #The digits option does not work here
+esticon(toe_RP,m1, beta0 = 0, conf.int = TRUE)
+```
+The data does not support a difference between groups post treatment; point estimate for this difference is 0.082879, p = 0.794874.
 
 # b
 
+Test the hypothesis whether there is a time effect and interpret your results.
 
+Similarly to question a part 3, we can test hyppothesis 2, that of a time effect, by testing the average of $\beta_2$ - $\beta_7$.  We can see that each of these coefficients is significant individually, so we expect significance in this calse.
+
+```{r}
+m2 <- c(0,0,1/6,1/6,1/6,1/6,1/6,1/6,0,0,0,0,0,0)
+#options(scipen = 999, digits = 6) #The digits option does not work here
+esticon(toe_RP,m2, beta0 = 0, conf.int = TRUE)
+```
+Thus we can reject $H_{02}$; the data supports a likely time-effect.
 
 # c
 
+What are the differences in assumptions between models used in this problem and a regular linear regression model?
 
+In a regular linear regression, it is assumed that each error term is independant; when analizing longitudinal data, we assume that the error term for a measurement associated with a particular subject is not independant of the error term of the other measurements for that subject.
 
 # d
 
+How does the covariance structure play a role in the estimation and inference of the model coefficients?
 
+As demonstrated in class, ignoring the underlying correlation in longitudinal data results in greater standard error and poorer model performance
 
 # e
 
+How might the study design (observational studies vs. randomized clinical trials) affect the choice of the hypothesis tests in response profile analysis?
+
+In randomized trials, comparison of baseline differences would be done mainly for testing the adequacy of randomization; whereas in an observational study, such a difference could be of interest.  As mentioned in class, testing if means are consistent over time (hypothesis 2), is of less interest because it does not directly compare the experimental groups; whereas in an observational study, testing this hypothesis could be of interest.

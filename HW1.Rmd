@@ -43,6 +43,7 @@ Create a profile plot of unaffected nail length vs. time for 50 group A subjects
 3. Whether there is any outlier in the data of your 50 subjects.
 
 Import the toenail data (NB "toe.xlsx" is Toenail.xlsx with the first 8 rows deleted)
+
 ```{r}
 toe <- read_excel("toe.xlsx")
 ```

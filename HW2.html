@@ -248,11 +248,161 @@ div.tocify {
 </div>
 
 
-<div id="exploratory-data-analysis" class="section level1">
-<h1>Exploratory Data Analysis</h1>
-<div id="a" class="section level2">
-<h2>a</h2>
+<p>Toenail Data: Response Profile Analysis</p>
+<div id="data-import-code-from-hw1" class="section level1">
+<h1>Data import code from HW1</h1>
+<pre class="r"><code>toe &lt;- read_excel(&quot;toe.xlsx&quot;)</code></pre>
 </div>
+<div id="a" class="section level1">
+<h1>a</h1>
+<p>Test the hypothesis whether the changes in the mean unaffected nail length are the same for the two treatment groups.</p>
+<div id="section" class="section level2">
+<h2>1</h2>
+<p>Write down your model for testing this hypothesis, perform the test and interpret your results.</p>
+<p>The model used to test “hypothesis 1”, the similarity of mean response profiles between the terbinafine and itraconazole groups can be expressed as:</p>
+<p><span class="math display">\[y_{ij} = \beta_0 + \beta_1 x_i + \beta_2 t_{0j} + \beta_3 t_{1j} + \beta_4 t_{2j} + \beta_5 t_{3j} + \beta_6 t_{6j} + \beta_7 t_{9j} + \\ \beta_{12} x_i t_{0j} + \beta_{13} x_i t_{1j} + \beta_{14} x_i t_{2j} + \beta_{15} x_i t_{3j} + \beta_{16} x_i t_{6j} + \beta_{17} x_i t_{9j} + \varepsilon_{ij}\]</span></p>
+<p>Where <span class="math inline">\(y_{ij}\)</span> denotes observed unaffected nail length in treatment group <span class="math inline">\(i\)</span> for subject <span class="math inline">\(j\)</span>; <span class="math inline">\(x_i = 0\)</span> for itraconazole and <span class="math inline">\(x_i = 1\)</span> for terbinafine; <span class="math inline">\(t_{kj} = 1\)</span> at time <span class="math inline">\(k = 0, 1, 2, 3, 6, 9, 12\)</span> months and <span class="math inline">\(t_{kj} = 1\)</span> otherwise; and <span class="math inline">\(\varepsilon_{ij}\)</span> denotes the error term for the observation. We can express the null hypothesis for hypothesis 1 as:</p>
+<p><span class="math display">\[H_{01}: \beta_{1k} = 0\]</span></p>
+<p>For <span class="math inline">\(k = 2,3,...7\)</span>.</p>
+<p>We can now perform the hypothesis test. First we can create new factored variables for time and treatment category:</p>
+<p>, levels = c(0,1,2,3,6,9,12), labels = c(1,2,3,4,5,6,7)</p>
+<pre class="r"><code>toe$time.f &lt;- factor(toe$time, levels = c(0,1,2,3,6,9,12), labels = c(1,2,3,4,5,6,7))
+toe$treat.f &lt;- factor(toe$treat)
+toe$time &lt;- as.numeric(toe$time)
+toe$timef &lt;- as.numeric(toe$time.f)</code></pre>
+<p>Making the model:</p>
+<pre class="r"><code>toe_RP &lt;- gls(response ~ time.f * treat.f, data = toe, corr=corSymm(form= ~ timef| id), weights = varIdent(form = ~ 1 | time.f))
+summary(toe_RP)</code></pre>
+<pre><code>## Generalized least squares fit by REML
+##   Model: response ~ time.f * treat.f 
+##   Data: toe 
+##        AIC      BIC    logLik
+##   7837.972 8069.708 -3876.986
+## 
+## Correlation Structure: General
+##  Formula: ~timef | id 
+##  Parameter estimate(s):
+##  Correlation: 
+##   1     2     3     4     5     6    
+## 2 0.902                              
+## 3 0.798 0.901                        
+## 4 0.681 0.760 0.860                  
+## 5 0.415 0.475 0.560 0.692            
+## 6 0.239 0.279 0.348 0.441 0.763      
+## 7 0.165 0.194 0.256 0.317 0.669 0.887
+## Variance function:
+##  Structure: Different standard deviations per stratum
+##  Formula: ~1 | time.f 
+##  Parameter estimates:
+##        1        2        3        4        5        6        7 
+## 1.000000 1.027592 1.096293 1.211106 1.462663 1.711065 1.955152 
+## 
+## Coefficients:
+##                      Value Std.Error   t-value p-value
+## (Intercept)       1.689189 0.2192807  7.703319  0.0000
+## time.f2           0.884530 0.1007228  8.781833  0.0000
+## time.f3           1.982611 0.1515990 13.077992  0.0000
+## time.f4           3.461223 0.2068375 16.734022  0.0000
+## time.f5           5.564021 0.3254990 17.093820  0.0000
+## time.f6           6.245767 0.4271924 14.620503  0.0000
+## time.f7           6.293619 0.4998055 12.592137  0.0000
+## treat.f1          0.398144 0.3090743  1.288183  0.1978
+## time.f2:treat.f1 -0.072497 0.1407915 -0.514927  0.6067
+## time.f3:treat.f1 -0.068974 0.2117075 -0.325801  0.7446
+## time.f4:treat.f1 -0.168894 0.2883563 -0.585711  0.5581
+## time.f5:treat.f1 -0.097182 0.4542532 -0.213939  0.8306
+## time.f6:treat.f1  0.391843 0.5940160  0.659650  0.5096
+## time.f7:treat.f1  0.512978 0.6946625  0.738457  0.4603
+## 
+##  Correlation: 
+##                  (Intr) tim.f2 tim.f3 tim.f4 tim.f5 tim.f6 tim.f7 trt.f1 t.2:.1
+## time.f2          -0.160                                                        
+## time.f3          -0.181  0.702                                                 
+## time.f4          -0.185  0.465  0.715                                          
+## time.f5          -0.265  0.273  0.426  0.617                                   
+## time.f6          -0.303  0.178  0.287  0.399  0.749                            
+## time.f7          -0.297  0.137  0.234  0.301  0.671  0.887                     
+## treat.f1         -0.709  0.113  0.129  0.131  0.188  0.215  0.211              
+## time.f2:treat.f1  0.114 -0.715 -0.502 -0.333 -0.195 -0.127 -0.098 -0.161       
+## time.f3:treat.f1  0.130 -0.503 -0.716 -0.512 -0.305 -0.206 -0.168 -0.183  0.703
+## time.f4:treat.f1  0.133 -0.333 -0.513 -0.717 -0.442 -0.286 -0.216 -0.187  0.466
+## time.f5:treat.f1  0.190 -0.195 -0.305 -0.442 -0.717 -0.536 -0.481 -0.267  0.274
+## time.f6:treat.f1  0.218 -0.128 -0.207 -0.287 -0.538 -0.719 -0.638 -0.307  0.180
+## time.f7:treat.f1  0.214 -0.098 -0.168 -0.217 -0.483 -0.638 -0.719 -0.301  0.138
+##                  t.3:.1 t.4:.1 t.5:.1 t.6:.1
+## time.f2                                     
+## time.f3                                     
+## time.f4                                     
+## time.f5                                     
+## time.f6                                     
+## time.f7                                     
+## treat.f1                                    
+## time.f2:treat.f1                            
+## time.f3:treat.f1                            
+## time.f4:treat.f1  0.717                     
+## time.f5:treat.f1  0.427  0.617              
+## time.f6:treat.f1  0.289  0.401  0.752       
+## time.f7:treat.f1  0.236  0.303  0.675  0.888
+## 
+## Standardized residuals:
+##        Min         Q1        Med         Q3        Max 
+## -1.9360267 -0.6928779 -0.1175128  0.5955241  4.5962226 
+## 
+## Residual standard error: 2.667665 
+## Degrees of freedom: 1854 total; 1840 residual</code></pre>
+<p>We can see from the above results that each of the p-values for the <span class="math inline">\(\beta_{1k}\)</span> are above the 0.05 threashold, and are not significant; thus we fail to reject <span class="math inline">\(H_{01}\)</span>.</p>
+</div>
+<div id="section-1" class="section level2">
+<h2>2</h2>
+<p>Calculate group differences at each time point after subtracting the baseline response and interpret your results.</p>
+<p>We can use the above reported regression coefficients to calculate the differences; <span class="math inline">\(\Delta_k = \beta_1 + \beta_{1k}\)</span> for <span class="math inline">\(k = 1,2,3,...7\)</span> (<span class="math inline">\(\beta_{11}=0\)</span>):</p>
+<ul>
+<li>$_1 = _1 = $ 0.398144</li>
+<li>$_1 = <em>1 + </em>{12}= $ 0.398144 + -0.072497 = 0.325647</li>
+<li>$_1 = <em>1 + </em>{13}= $ 0.398144 + -0.068974 = 0.32917</li>
+<li>$_1 = <em>1 + </em>{14}= $ 0.398144 + -0.168894 = 0.229254</li>
+<li>$_1 = <em>1 + </em>{15}= $ 0.398144 + -0.097182 = 0.300962</li>
+<li>$_1 = <em>1 + </em>{16}= $ 0.398144 + 0.391843 = 0.789987</li>
+<li>$_1 = <em>1 + </em>{17}= $ 0.398144 + 0.512978 = 0.911122</li>
+</ul>
+</div>
+<div id="section-2" class="section level2">
+<h2>3</h2>
+<p>Calculate the overall (average) group difference after subtracting the baseline response and interpret your results.</p>
+<p>The following code can be used to calculate the average group-difference post-treatment change from baseline:</p>
+<pre class="r"><code>m1 &lt;- c(0,0,0,0,0,0,0,0,1/6,1/6,1/6,1/6,1/6,1/6)
+#options(scipen = 999, digits = 6) #The digits option does not work here
+esticon(toe_RP,m1, beta0 = 0, conf.int = TRUE)</code></pre>
+<pre><code>##      estimate std.error statistic  p.value    beta0 df
+## [1,] 0.082879  0.318781  0.067593 0.794874 0.000000  1</code></pre>
+<p>The data does not support a difference between groups post treatment; point estimate for this difference is 0.082879, p = 0.794874.</p>
+</div>
+</div>
+<div id="b" class="section level1">
+<h1>b</h1>
+<p>Test the hypothesis whether there is a time effect and interpret your results.</p>
+<p>Similarly to question a part 3, we can test hyppothesis 2, that of a time effect, by testing the average of <span class="math inline">\(\beta_2\)</span> - <span class="math inline">\(\beta_7\)</span>. We can see that each of these coefficients is significant individually, so we expect significance in this calse.</p>
+<pre class="r"><code>m2 &lt;- c(0,0,1/6,1/6,1/6,1/6,1/6,1/6,0,0,0,0,0,0)
+#options(scipen = 999, digits = 6) #The digits option does not work here
+esticon(toe_RP,m2, beta0 = 0, conf.int = TRUE)</code></pre>
+<pre><code>##       estimate std.error statistic   p.value     beta0 df
+## [1,]   3.99090   0.23973 277.13238   0.00000   0.00000  1</code></pre>
+<p>Thus we can reject <span class="math inline">\(H_{02}\)</span>; the data supports a likely time-effect.</p>
+</div>
+<div id="c" class="section level1">
+<h1>c</h1>
+<p>What are the differences in assumptions between models used in this problem and a regular linear regression model?</p>
+<p>In a regular linear regression, it is assumed that each error term is independant; when analizing longitudinal data, we assume that the error term for a measurement associated with a particular subject is not independant of the error term of the other measurements for that subject.</p>
+</div>
+<div id="d" class="section level1">
+<h1>d</h1>
+<p>How does the covariance structure play a role in the estimation and inference of the model coefficients?</p>
+<p>As demonstrated in class, ignoring the underlying correlation in longitudinal data results in greater standard error and poorer model performance</p>
+</div>
+<div id="e" class="section level1">
+<h1>e</h1>
+<p>How might the study design (observational studies vs. randomized clinical trials) affect the choice of the hypothesis tests in response profile analysis?</p>
+<p>In randomized trials, comparison of baseline differences would be done mainly for testing the adequacy of randomization; whereas in an observational study, such a difference could be of interest. As mentioned in class, testing if means are consistent over time (hypothesis 2), is of less interest because it does not directly compare the experimental groups; whereas in an observational study, testing this hypothesis could be of interest.</p>
 </div>
 
 

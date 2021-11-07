@@ -1,0 +1,830 @@
+---
+title: "Homework 4 - BSTA 519"
+author: "Matthew Hoctor"
+date: "10/31/2021"
+output:
+  html_document:
+    number_sections: no
+    theme: lumen
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+#library(CarletonStats)
+#library(pwr)
+#library(BSDA)
+#library(exact2x2)
+#library(car)
+#library(dvmisc)
+#library(emmeans)
+#library(gridExtra)
+#library(DescTools)
+#library(DiagrammeR)
+library(nlme)
+library(doBy)
+```
+
+Toenail Data: Parametric & Semi-Parametric Curves
+
+# Dental Data import
+
+Import the 'dental' dataset:
+
+```{r}
+dent <- read_csv("dent.csv")
+```
+
+Create factored long-form data:
+
+```{r}
+dent_long <- pivot_longer(data = dent, cols = c("8", "10","12", "14"), names_to = "age", values_to = "distance")
+```
+
+# 1.1
+
+On a single graph, construct a time plot that displays the mean distance (mm) vs. age (in years)) for boys and girls. Describe the time trends for boys and girls.
+
+```{r}
+mm_mean <- dent_long %>% group_by(Gender, age) %>% summarise(mm = mean(distance))
+```
+
+Creating a factored gender variable for ggplot:
+
+```{r}
+mm_mean$Gender.f <- factor(mm_mean$Gender, c("F", "M"))
+```
+
+Creating a numeric age variable:
+
+```{r}
+mm_mean$age <- as.numeric(mm_mean$age)
+```
+
+
+Plotting with ggplot:
+
+```{r}
+ggplot(data = mm_mean, 
+       mapping = aes(
+         x = age,
+         y = mm,
+         colour = Gender.f,
+         group = Gender
+         )) +
+  geom_line() + geom_point()
+
+ggplot(data = mm_mean, 
+       mapping = aes(
+         x = age,
+         y = mm,
+         colour = Gender.f,
+         group = Gender
+         )) +
+  geom_line() + geom_point()+coord_cartesian(ylim = c(0,30))
+```
+
+As we can see from the plots above, the average dental growth distance increases with age for female and male children over the ages considered; however the average dental growth distance for males is greater throughout the age range.  Plotting such that the graph of the response variable includes the null shows that the relative increases are somewhat small, overall.
+
+# 1.2
+
+Provide the estimated covariance and correlation matrix from the data, and describe how the variance and correlation change over time.
+
+To provide a qualitative visualization, see below for the scatterplot matrix:
+
+```{r}
+pairs(dent[,3:6])
+```
+
+To calculate the correlation matrix:
+
+```{r}
+round(cor(dent[, 3:6]), 4)
+```
+
+To calculate the covariance matrix:
+
+```{r}
+round(cov(dent[, 3:6]), 4)
+```
+
+Although we would expect to see decreasing correlation over time; no distinct pattern of change in correlation or covariance is immediately apparent from these matricies.  Increasing variance (along the diagonal of the covariance matrix) is possible, but not completely apparent.
+
+# 1.3
+
+## Fitting Models
+
+Use the response profile model (saturated model for the mean response) as the maximal model for the mean, fit the following models for covariance:
+
+First we will convert age to a numerical variable in the long-form dataset:
+
+```{r}
+dent_long$age <- as.numeric(dent_long$age)
+```
+
+Then create factored variables for age and gender:
+
+```{r}
+dent_long$Gender.f <- factor(dent_long$Gender, c("F", "M"))
+dent_long$age.f <- factor(dent_long$age, c(8,10,12,14))
+```
+
+Then create a 'time' variable so that corSymm doesn't complain about 'objects must be a sequence of consecutive integers':
+
+```{r}
+dent_long$time = dent_long$age
+dent_long$time[dent_long$age == 8] = 1
+dent_long$time[dent_long$age == 10] = 2
+dent_long$time[dent_long$age == 12] = 3
+dent_long$time[dent_long$age == 14] = 4
+```
+
+### i. Unstructured covariance
+
+Creating the model:
+
+```{r}
+dent_reml_uns <- gls(distance ~ Gender.f*age.f, 
+                     data = dent_long,
+                     corr = corSymm(form = ~ time | ID),       # it does not run if use form =  ~ age | ID
+                     weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+```
+
+Summary:
+
+```{r}
+summary(dent_reml_uns)
+```
+
+Type III test:
+
+```{r}
+anova(dent_reml_uns)
+```
+
+Covariance & Correlation:
+
+```{r}
+#obtain covariance structure
+getVarCov(dent_reml_uns)
+
+#obtain correlation matrix
+dent_reml_uns_cov <- getVarCov(dent_reml_uns)
+dent_reml_uns_cov
+cov2cor(dent_reml_uns_cov)
+
+is.matrix(dent_reml_uns_cov)
+
+#Obtain correlation parameters
+dent_reml_uns_MS <- dent_reml_uns$modelStruct
+dent_reml_uns_MS$corStruct
+
+dent_reml_uns_MS$varStruct
+```
+
+### ii. Compound symmetry
+
+Creating the model:
+
+```{r}
+dent_reml_cs <- gls(distance ~ Gender.f*age.f, 
+                     data = dent_long,
+                     corr = corCompSymm(form = ~ time | ID),       # it does not run if use form =  ~ age | ID
+                     #weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+```
+
+Summary:
+
+```{r}
+summary(dent_reml_cs)
+```
+
+Type III test:
+
+```{r}
+anova(dent_reml_cs)
+```
+
+Covariance & Correlation:
+
+```{r}
+#obtain covariance structure
+getVarCov(dent_reml_cs)
+
+#obtain correlation matrix
+dent_reml_cs_cov <- getVarCov(dent_reml_cs)
+dent_reml_cs_cov
+cov2cor(dent_reml_cs_cov)
+
+is.matrix(dent_reml_cs_cov)
+
+#Obtain correlation parameters
+dent_reml_cs_MS <- dent_reml_cs$modelStruct
+dent_reml_cs_MS$corStruct
+
+dent_reml_cs_MS$varStruct
+```
+
+### iii. Heterogeneous Compound symmetry
+
+Creating the model:
+
+```{r}
+dent_reml_csh <- gls(distance ~ Gender.f*age.f, 
+                     data = dent_long,
+                     corr = corCompSymm(form = ~ time | ID),       # it does not run if use form =  ~ age | ID
+                     weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+```
+
+Summary:
+
+```{r}
+summary(dent_reml_csh)
+```
+
+Type III test:
+
+```{r}
+anova(dent_reml_csh)
+```
+
+Covariance & Correlation:
+
+```{r}
+#obtain covariance structure
+getVarCov(dent_reml_csh)
+
+#obtain correlation matrix
+dent_reml_csh_cov <- getVarCov(dent_reml_csh)
+dent_reml_csh_cov
+cov2cor(dent_reml_csh_cov)
+
+is.matrix(dent_reml_csh_cov)
+
+#Obtain correlation parameters
+dent_reml_csh_MS <- dent_reml_csh$modelStruct
+dent_reml_csh_MS$corStruct
+
+dent_reml_csh_MS$varStruct
+```
+
+#### Compare compound symmetry to heterogenious compound symmetry
+
+```{r}
+anova(dent_reml_cs, dent_reml_csh, test = TRUE)
+```
+
+
+
+### iv. Autoregressive(1)
+
+Creating the model:
+
+```{r}
+dent_reml_ar1 <- gls(distance ~ Gender.f*age.f, 
+                     data = dent_long,
+                     corr = corAR1(form = ~ time | ID),       # it does not run if use form =  ~ age | ID
+                     #weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+```
+
+Summary:
+
+```{r}
+summary(dent_reml_ar1)
+```
+
+Type III test:
+
+```{r}
+anova(dent_reml_ar1)
+```
+
+Covariance & Correlation:
+
+```{r}
+#obtain covariance structure
+getVarCov(dent_reml_ar1)
+
+#obtain correlation matrix
+dent_reml_ar1_cov <- getVarCov(dent_reml_ar1)
+dent_reml_ar1_cov
+cov2cor(dent_reml_ar1_cov)
+
+is.matrix(dent_reml_ar1_cov)
+
+#Obtain correlation parameters
+dent_reml_ar1_MS <- dent_reml_ar1$modelStruct
+dent_reml_ar1_MS$corStruct
+
+dent_reml_ar1_MS$varStruct
+```
+
+### v. Heterogeneous autoregressive(1)
+
+Creating the model:
+
+```{r}
+dent_reml_ar1h <- gls(distance ~ Gender.f*age.f, 
+                     data = dent_long,
+                     corr = corAR1(form = ~ time | ID),       # it does not run if use form =  ~ age | ID
+                     weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+```
+
+Summary:
+
+```{r}
+summary(dent_reml_ar1h)
+```
+
+Type III test:
+
+```{r}
+anova(dent_reml_ar1h)
+```
+
+Covariance & Correlation:
+
+```{r}
+#obtain covariance structure
+getVarCov(dent_reml_ar1h)
+
+#obtain correlation matrix
+dent_reml_ar1h_cov <- getVarCov(dent_reml_ar1h)
+dent_reml_ar1h_cov
+cov2cor(dent_reml_ar1h_cov)
+
+is.matrix(dent_reml_ar1h_cov)
+
+#Obtain correlation parameters
+dent_reml_ar1h_MS <- dent_reml_ar1h$modelStruct
+dent_reml_ar1h_MS$corStruct
+
+dent_reml_ar1h_MS$varStruct
+```
+
+#### Compare AR1 to heterogenious AR1
+
+```{r}
+anova(dent_reml_ar1h, dent_reml_ar1, test = TRUE)
+```
+
+### vi. Toeplitz
+
+Creating the model:
+
+```{r}
+dent_reml_toep <- gls(distance ~ Gender.f*age.f, 
+                     data = dent_long,
+                     corr = corARMA(form = ~ time | ID, p = 3),       # it does not run if use form =  ~ age | ID
+                     #weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+```
+
+Summary:
+
+```{r}
+summary(dent_reml_toep)
+```
+
+Type III test:
+
+```{r}
+anova(dent_reml_toep)
+```
+
+Covariance & Correlation:
+
+```{r}
+#obtain covariance structure
+getVarCov(dent_reml_toep)
+
+#obtain correlation matrix
+dent_reml_toep_cov <- getVarCov(dent_reml_toep)
+dent_reml_toep_cov
+cov2cor(dent_reml_toep_cov)
+
+is.matrix(dent_reml_toep_cov)
+
+#Obtain correlation parameters
+dent_reml_toep_MS <- dent_reml_toep$modelStruct
+dent_reml_toep_MS$corStruct
+
+dent_reml_toep_MS$varStruct
+```
+
+### vii. Heterogeneous Toeplitz
+
+Creating the model:
+
+```{r}
+dent_reml_toeph <- gls(distance ~ Gender.f*age.f, 
+                     data = dent_long,
+                     corr = corARMA(form = ~ time | ID, p = 3),       # it does not run if use form =  ~ age | ID
+                     weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+```
+
+Summary:
+
+```{r}
+summary(dent_reml_toeph)
+```
+
+Type III test:
+
+```{r}
+anova(dent_reml_toeph)
+```
+
+Covariance & Correlation:
+
+```{r}
+#obtain covariance structure
+getVarCov(dent_reml_toeph)
+
+#obtain correlation matrix
+dent_reml_toeph_cov <- getVarCov(dent_reml_toeph)
+dent_reml_toeph_cov
+cov2cor(dent_reml_toeph_cov)
+
+is.matrix(dent_reml_toeph_cov)
+
+#Obtain correlation parameters
+dent_reml_toeph_MS <- dent_reml_toeph$modelStruct
+dent_reml_toeph_MS$corStruct
+
+dent_reml_toeph_MS$varStruct
+```
+
+#### Compare Toeplitz to heterogenious Toeplitz
+
+```{r}
+anova(dent_reml_toeph, dent_reml_toep, test = TRUE)
+```
+
+## Based on the results from these models, do the following:            
+
+### a
+
+Based on the estimated unstructured covariance, describe how the variance and correlation change over time. Do you see similar pattern to what you saw in 1.2?
+
+Comparing the correlation matrix from 1.2 to that of the unstructured model:
+
+```{r}
+#1.2
+round(cor(dent[, 3:6]), 4)
+#Unstructured
+round(cov2cor(dent_reml_uns_cov), 4)
+```
+
+Comparing the covariance matrix from 1.2 to that of the unstructured model:
+
+```{r}
+#1.2
+round(cov(dent[, 3:6]), 4)
+#Unstructured
+round(dent_reml_uns_cov, 4)
+```
+
+A similar pattern is seen in the unstructured correlation matrix as was found in 1.2 (i.e. a lack of defined pattern in change in correlation); similarly for the covariance matrix, although it is interesting to note overall smaller values for the covariance matrix of the unstructured model.
+
+### b
+
+Provide the estimated covariance matrix and estimated correlation matrix for covariance pattern models ii to vii, and qualitatively summarize the major differences among these estimated covariance and correlation matrices.
+
+#### ii CS
+
+Correlation matrix
+
+```{r}
+round(cov2cor(dent_reml_cs_cov), 4)
+```
+
+Covariance matrix
+
+```{r}
+round(dent_reml_cs_cov, 4)
+```
+
+#### iii hCS
+
+Correlation matrix
+
+```{r}
+round(cov2cor(dent_reml_csh_cov), 4)
+```
+
+Covariance matrix
+
+```{r}
+round(dent_reml_csh_cov, 4)
+```
+
+
+#### iv AR1
+
+Correlation matrix
+
+```{r}
+round(cov2cor(dent_reml_ar1_cov), 4)
+```
+
+Covariance matrix
+
+```{r}
+round(dent_reml_ar1_cov, 4)
+```
+
+
+#### v hAR1
+
+Correlation matrix
+
+```{r}
+round(cov2cor(dent_reml_ar1h_cov), 4)
+```
+
+Covariance matrix
+
+```{r}
+round(dent_reml_ar1h_cov, 4)
+```
+
+
+#### vi Toep
+
+Correlation matrix
+
+```{r}
+round(cov2cor(dent_reml_toep_cov), 4)
+```
+
+Covariance matrix
+
+```{r}
+round(dent_reml_toep_cov, 4)
+```
+
+
+#### vii hToep
+
+Correlation matrix
+
+```{r}
+round(cov2cor(dent_reml_toeph_cov), 4)
+```
+
+Covariance matrix
+
+```{r}
+round(dent_reml_toeph_cov, 4)
+```
+
+
+#### Summary of differences
+
+As we would expect from the mathematical definitions of these covariance patterns, autoregressive models had the greatest decreases in covariance over time, whereas compound symmetry models showed the least decreases in covariance overtime, and the Toeplitz models had an intermediate decrease in covariance over time.
+
+### c
+
+Compared to the unstructured covariance, do the compound symmetry, heterogeneous compound symmetry, and Toeplitz models provide adequate fit? Perform the relevant tests and interpret your results.
+
+All of these models are nested within the unstructured covariance model; and thus all can be compared to the unstructured covariance model with the LRT:
+
+#### CS vs Unstructured
+
+```{r}
+anova(dent_reml_cs, dent_reml_uns, test = TRUE)
+```
+
+
+#### Heterogenious CS vs Unstructured
+
+```{r}
+anova(dent_reml_csh, dent_reml_uns, test = TRUE)
+```
+
+#### Toeplitz vs Unstructured
+
+```{r}
+anova(dent_reml_toep, dent_reml_uns, test = TRUE)
+```
+
+#### Heterogenious Toeplitz vs Unstructured
+
+```{r}
+anova(dent_reml_toeph, dent_reml_uns, test = TRUE)
+```
+
+#### Conclusion
+
+None of the above liklihood ratio tests provided a significant result, and thus compared to the unstructured model Toeplitz and compound symmetry models provide adequate fit.  
+
+### d
+
+Do the heterogeneous compound symmetry and Toeplitz provide a better fit than the compound symmetry model? Perform the relevant test and show your results.
+
+The compound symmetry model is nested within the Toeplitz model, and the CS model is also nested within the heterogeneous CS model; thus these two comparisons can be made with the LRT:
+
+#### CS vs Toeplitz
+
+```{r}
+anova(dent_reml_toep, dent_reml_cs, test = TRUE)
+```
+
+
+#### CS vs hCS
+
+```{r}
+anova(dent_reml_csh, dent_reml_cs, test = TRUE)
+```
+
+#### Conclusion
+
+None of the above liklihood ratio tests provided a significant result, and thus compared to the compound symmetry model, the Toeplitz and heterogeneous compound symmetry models do not provide adequate fit (and have more parameters and thus are less parsimonious).  
+
+### e
+
+Compare the performance of heterogeneous compound symmetry, heterogeneous autoregressive (1) and heterogeneous Toeplitz models.
+
+The heterogeneous CS and heterogeneous autoregressive models are nested within the heterogeneous toeplitz; however the heterogeneous CS and heterogeneous autoregressive models are not nested in any way.  The best way to compare these models is with AIC & BIC (which is reported nicely from the anova function):
+
+```{r}
+anova(dent_reml_ar1h, dent_reml_csh, dent_reml_toeph)
+```
+
+Therefore we would choose the heterogenous compound symmetry model based on these criteria.
+
+### f
+
+Choose a model for the covariance pattern that adequately fits the data.
+
+We can choose the compound symmetry model, based on the above results.  From part c we know that Toeplitz and CS models (homogenous or heterogeneous variance) compare adequately to the unstructure model; from part d we know that the CS model is preffered to Toeplitz and heterogeneous CS becaus of adequate fit and parsimony.
+
+# 1.4
+
+Given the choice of model for the covariance from 1.3.f, and still use the response profile as the mean model, determine whether the pattern of change over time is different for boys and girls.
+
+If we suppose that there is a simple linear relationship, we can express the model in terms of the response (distance in mm) $y_{ij}$:
+
+$$y_{ij} = \beta_0 + \beta_1 x_i + \beta_2 t_{ij} + \beta_{12} x_i  t_{ij} + \varepsilon_{ij}$$
+
+Where$x_i$ denotes gender (1 for female, 0 for male), and $t_{ij}$ denotes time.  
+
+The null hypothesis that overall pattern of change does not differ between the two groups can be expressed as:
+
+$$H_0: \beta_1 =  \beta_{12} = 0$$
+
+We can find the p-value and 95% CI for our parameters with the following commands:
+
+```{r}
+dent_final <- gls(distance ~ Gender*age, 
+                     data = dent_long,
+                     corr = corCompSymm(form = ~ time | ID),       # it does not run if use form =  ~ age | ID
+                     #weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+```
+
+
+```{r}
+summary(dent_final)
+```
+
+```{r}
+intervals(dent_final)
+```
+
+
+We can also do a type III test for our null hypothesis:
+
+```{r}
+q1 = c(0,1,0,0)
+q2 = c(0,0,0,1)
+anova(dent_final, L = rbind(q1, q2))
+```
+
+## Conclusion
+
+Therefore we can reject $H_0$; there is a significant difference in pattern of change over time for boys and girls.
+
+# 1.5
+
+Given the choice of model for the covariance from 1.3.f, fit a linear trend model, and determine whether the change over time is different for boys and girls. Does the linear trend seem to be adequate to describe the pattern of change in the two  groups?
+
+## Change between genders
+
+We can test the difference in linear trend between boys and girls, by testing the following null hypothesis:
+
+$$H_0: \beta_{12} = 0$$
+
+We have the p-value and 95% CI of $\beta_{12}$ from part 1.5; but we can also perform a type III test will test of this hypothesis:
+
+```{r}
+s1 = c(0,0,0,1)
+anova(dent_final, L = s1)
+```
+
+### Conclusion
+
+Therefore we can reject $H_0$; there is a significant difference in change over time for boys compared to girls.
+
+## Adequacy of linear trend
+
+### Quadratic model
+
+We can create a quadratic model with compound symmetry and compare it to the linear model to assess if there may be a need for a higher order model.  The quadratic model can be expressed as:
+
+$$y_{ij} = \beta_0 + \beta_1 x_i + \beta_2 t_{ij} + \beta_3 t_{ij}^2 +  \beta_{12} x_i  t_{ij} + \beta_{13} x_i  t_{ij}^2 + \varepsilon_{ij}$$
+
+First creating centralized age and quadratic age variables:
+
+```{r}
+dent_long$age_c <- dent_long$age - mean(dent_long$age)
+dent_long$age_c_sq <- (dent_long$age_c)^2
+```
+
+Creating the model:
+
+```{r}
+dent_cs_quad <- gls(distance ~ Gender*age_c + Gender*age_c_sq, 
+                     data = dent_long,
+                     corr = corCompSymm(form = ~ time | ID),       # it does not run if use form =  ~ age | ID
+                     #weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+summary(dent_cs_quad)
+```
+
+
+We can test $H_0: \beta_3 = \beta_{13} = 0$ using a type III test:
+
+```{r}
+q1 = c(0,0,0,1,0,0)
+q2 = c(0,0,0,0,0,1)
+anova(dent_cs_quad, L = rbind(q1, q2))
+```
+
+Therefore we can reject $H_0$; adding a quadratic term does not improve the model.  It is  possible that other kinds of models (e.g. splines) may improve the model, but given the above result, and given the linear trends seen in the graphical result they are unlikely to have much benefit over the linear model.
+
+### Linear Splines
+
+We can also consider a linear spline model.  The graph of average dental growth suggests that patterns of dental growth may change at age 10; thus we can use $t^* = 10 \; \mbox{years}$.
+
+First we can create the new variable for $t'$:
+
+```{r}
+dent_long$a10 <- ifelse(dent_long$age>10, dent_long$age-10, 0)
+```
+
+```{r}
+dent_cs_spline <- gls(distance ~ Gender*age + Gender*a10, 
+                     data = dent_long,
+                     corr = corCompSymm(form = ~ time | ID),       # it does not run if use form =  ~ age | ID
+                     #weights = varIdent(form = ~ 1 | age),
+                     method = "REML"
+                     )
+summary(dent_cs_spline)
+```
+
+We can test $H_0: \beta_3 = \beta_{13} = 0$ using a type III test:
+
+```{r}
+q1 = c(0,0,0,1,0,0)
+q2 = c(0,0,0,0,0,1)
+anova(dent_cs_spline, L = rbind(q1, q2))
+```
+
+This model also does not perform any better than the linear model.
+
+### Conclusion
+
+Although it is possible that a complex model may offer marginal improvements over the linera model; it is unlikely given that no improvement is seen with quadratic or linear spline models.
+
+# 1.6
+
+Based on results from 1.4 and 1.5, what conclusions can you draw about gender differences in patterns of dental growth?
+
+From part 1.4 we saw an overall difference in dental growth pattern between dental growth in boys and girls; and from part 1.5 we noticed a difference in dental growth over time between boys and girls.  The p-values and 95% CIs from part 1.4 showed us that $\beta_1$, the intercept offset for gender, is not significant; whereas $\beta_{12}$, the difference in slope betweeen genders, is significant.  Thus the difference in overall patterns of dental growth is driven by change over time.
+

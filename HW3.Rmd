@@ -1,0 +1,447 @@
+---
+title: "Homework 3 - BSTA 519"
+author: "Matthew Hoctor"
+date: "10/25/2021"
+output:
+  html_document:
+    number_sections: no
+    theme: lumen
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readxl)
+library(tidyverse)
+#library(ggplot2)
+#library(CarletonStats)
+#library(pwr)
+#library(BSDA)
+#library(exact2x2)
+#library(car)
+#library(dvmisc)
+#library(emmeans)
+#library(gridExtra)
+#library(DescTools)
+#library(DiagrammeR)
+library(nlme)
+library(doBy)
+```
+
+Toenail Data: Parametric & Semi-Parametric Curves
+
+# Data import code from HW1
+
+Import the 'toe' dataset:
+
+```{r}
+toe <- read_excel("toe.xlsx")
+```
+
+Create factored data, and convert time data to numeric:
+
+```{r}
+toe$time.f <- factor(toe$time, levels = c(0,1,2,3,6,9,12), labels = c(1,2,3,4,5,6,7))
+toe$treat.f <- factor(toe$treat)
+toe$time <- as.numeric(toe$time)
+toe$timef <- as.numeric(toe$time.f)
+```
+
+# a
+
+  * Fit a linear trend model to test whether the linear trends differ between the two groups. 
+  * Write down the overall linear trend model and the null hypothesis for this test. 
+  * Will you reject the null hypothesis? Is there a difference in linear trends among the two groups?
+  * Write out the fitted linear equation for each group and interpret the slope coefficient. 
+  * Do you think the linear trend model provides a good fit for the data?
+
+## Write down the overall linear trend model and the null hypothesis for this test
+
+If we suppose that there is a simple linear relationship, we can express the model in terms of $y_{ij}$:
+
+$$y_{ij} = \beta_0 + \beta_1 x_i + \beta_2 t_{ij} + \beta_{12} x_i  t_{ij} + \varepsilon_{ij}$$
+
+Where$x_i$ denotes the treatment group (1 for terbinafine, 0 for itraconazole), and $t_{ij}$ denotes time.  The null hypothesis that linear trends do not differ between the two groups can be expressed as:
+
+$$H_0: \beta_{12} = 0$$
+
+## Fit a linear trend model to test whether the linear trends differ between the two groups
+
+With this model in mind, we can now fit this model, and test for a difference in linear trend between the two groups:
+
+```{r}
+toe.linear <- gls(response ~ treat*time, data = toe, corr=corCompSymm(form= ~ timef| id))
+```
+
+```{r}
+summary(toe.linear)
+```
+
+```{r}
+intervals(toe.linear)
+```
+
+From the linear model summary, we can see that the p-value for $\beta_{12}$ is equal to 0.1310; with point estimate and 95% CI of 0.047 (-0.014, 0.109).  Therefore, with a non-significant p-value and 95% CI spanning the null value we do not find a difference in linear trend between the two groups.
+
+## Will you reject the null hypothesis? Is there a difference in linear trends among the two groups?
+
+We do not reject the $H_0$; there is no significant difference in linear trends among the two groups.
+
+## Write out the fitted linear equation for each group and interpret the slope coefficient
+
+The linear equation for control group (group 0, itraconazole) can be written from the general model with $x_i=0$:
+
+$$y_{ij} = \beta_0 + \beta_2 t_{ij} + \varepsilon_{ij} = 2.52 + 0.56 t_{ij} + \varepsilon_{ij} $$
+
+The linear equation for treatment group (group 1, terbinafine) can be written from the general model with $x_i=1$:
+
+$$y_{ij} = (\beta_0 + \beta_1) + (\beta_2  + \beta_{12})  t_{ij} + \varepsilon_{ij} = 2.77 + 0.61 t_{ij} + \varepsilon_{ij}$$
+
+## Do you think the linear trend model provides a good fit for the data?
+
+At this point, we have AIC & BIC values, but it is difficult to say if the linear model provides a 'good' fit for the data because we do not yet have other models to compare it to.  Plotting the lines found above against a response profile plot would only provide a qualitative idea of if the models were close to the averages at the reported time points.
+
+# b
+
+  * Fit a quadratic trend model to test whether the time trends differ between the two groups. 
+  * Write down the overall quadratic trend model and the null hypothesis for this test. 
+  * Will you reject the null hypothesis? 
+  * Write out the fitted equation for each group. 
+  * Test whether the quadratic trend model provides a better fit for the data than the linear trend model.
+
+## Write down the overall quadratic trend model and the null hypothesis for this test
+
+This model is similar to the model from part a, with the addition of a quadratic time term:
+
+$$y_{ij} = \beta_0 + \beta_1 x_i + \beta_2 t_{ij} + \beta_3 t_{ij}^2 +  \beta_{12} x_i  t_{ij} + \beta_{13} x_i  t_{ij}^2 + \varepsilon_{ij}$$
+
+Similar to the linear case, the null hypothesis that quadratic trends do not differ between the two groups can be expressed as:
+
+$$H_0: \beta_{12} = \beta_{13} = 0$$
+
+##  Write out the fitted equation for each group
+
+Similar to the linear case, the equation for the control group (group 0, itraconazole) can be written from the general model with $x_i=0$:
+
+$$y_{ij} = \beta_0 + \beta_2 t_{ij} + \beta_3 t_{ij}^2 + \varepsilon_{ij}$$
+
+The equation for treatment group (group 1, terbinafine) can be written from the general model with $x_i=1$:
+
+$$y_{ij} = (\beta_0 + \beta_1) + (\beta_2  + \beta_{12})  t_{ij} + (\beta_3 + \beta_{13}) t_{ij}^2 + \varepsilon_{ij}$$
+
+## Fit a quadratic trend model to test whether the time trends differ between the two groups
+
+First we can create the centered and quadratic time variables:
+
+```{r}
+toe$t_c <- toe$time - mean(toe$time)
+toe$tsq_c <- (toe$t_c)^2
+```
+
+Then we can make the model:
+
+```{r}
+toe.quad <- gls(response ~ treat*t_c + treat*tsq_c, data = toe, corr=corCompSymm(form= ~ timef| id))
+```
+
+```{r}
+summary(toe.quad)
+```
+
+```{r}
+intervals(toe.quad)
+```
+
+From the quadratic model summary, we can see that the p-value for $\beta_{13}$ is equal to 0.3371; with point estimate and 95% CI of 0.009 (-0.009, 0.027).  Therefore, with a non-significant p-value and 95% CI spanning the null value we do not find a difference in quadratic trend between the two groups.
+
+## Will you reject the null hypothesis?
+
+We found a significant p-value for $\beta_3$ (but not for $\beta_{13}$), so we expect that we will reject $H_0$; however, we can test $H_0$ with a liklihood ratio test:
+
+```{r}
+q1 = c(0,0,0,0,1,0)
+q2 = c(0,0,0,0,0,1)
+anova(toe.quad, L = rbind(q1, q2))
+```
+
+We find a significant p-value for this test, and therefore reject $H_0$; the time trends do not differ between the two groups.
+
+## Test whether the quadratic trend model provides a better fit for the data than the linear trend model
+
+We can test if the quadratic trend model provides a better fit than the linear trend model using a liklihood ratio test, as above but with different parameters, according to the null hypothesis $H_0: \beta_3= \beta_{13} = 0$:
+
+```{r}
+q1 = c(0,0,0,1,0,0)
+q2 = c(0,0,0,0,0,1)
+anova(toe.quad, L = rbind(q1, q2))
+```
+
+We fail to reject $H_0$; herefore the quadratic trend model provides a better fit than the linear model.
+
+# c
+
+For the purpose of exercise, use t* = 6 months and fit a linear spline model to evaluate the difference in time trends between the two groups. Write down the overall model, specify the null hypothesis for this test and interpret your test results.
+
+Write out the fitted linear equation for each group within each time segment, and test the significance of and interpret the slope for each line. 
+  * Is there evidence that the slope of the line changes after 6 months for each group? 
+  * Is there evidence that the time trends are different between the two groups within each time segment?
+
+For the linear splines question, there are a total of 9 significance tests we want to see (meaning you will also need to write the corresponding hypothesis you are testing). Also note the *control* is really another treatment (Itraconazol). Please include the point estimates and confidence intervals in your interpretations, including if significant or not. 
+
+1) Slope for controls =<6 months
+2) Slope for controls > 6 months
+3) Slope for treatment group  =<6 months
+4) Slope for treatment group >6
+5) If slope differs after 6 months for controls
+6) If slope differs after 6 months for treatment
+7) Overall treatment effect
+8) Treatment effect =< 6 months
+9) Treatment effect > 6 months
+
+## Linear Splines Model
+
+If we suppose that the linear trend may change at 6 months, we can define a new variable $t'$ with values of $0$ up to 6 months, and values of $time -6$ afterwards:
+
+$$\begin{equation*}
+t' =\begin{cases}
+          0 \quad &\mbox{for} \; t_{ij} \leq 6 \\
+          t_{ij} - 6 \quad &\mbox{for} \;  6 < t_{ij} \\
+     \end{cases}
+\end{equation*}$$
+
+We can use this new variable to describe the linear splines model:
+
+$$y_{ij} = \beta_0 + \beta_1 x_i + \beta_2 t_{ij} + \beta_3 (t_{ij} - t') +  \beta_{12} x_i  t_{ij} + \beta_{13} x_i  (t_{ij} - t') + \varepsilon_{ij}$$
+
+For the control group, this simplifies to:
+
+$$\begin{equation*}
+y_{ij} =\begin{cases}
+          \beta_0 + &\beta_2 t_{ij} +  &\varepsilon_{ij} &&\mbox{for} \; t_{ij} \leq 6 \\
+          \beta_0 - 6\beta_3 +&(\beta_2 +\beta_3) t_{ij}  +  &\varepsilon_{ij} &&\mbox{for} \;  6 < t_{ij} \\
+     \end{cases}
+\end{equation*}$$
+
+For the intervention group, this simplifies to:
+
+$$\begin{equation*}
+y_{ij} =\begin{cases}
+          (\beta_0 + \beta_1) + &(\beta_2 + \beta_{12}) t_{ij} +  &\varepsilon_{ij} &\mbox{for} \; t_{ij} \leq 6 \\
+          (\beta_0 + \beta_1) - 6(\beta_3 + \beta_{13}) + & (\beta_2 +\beta_3 + \beta_{12} + \beta_{13}) t_{ij}  +  &\varepsilon_{ij} &\mbox{for} \;  6 < t_{ij} \\
+     \end{cases}
+\end{equation*}$$
+
+## Create the Model
+
+First we will create a new variable for $t'$:
+
+```{r}
+toe$t6 <- ifelse(toe$time>6,toe$time-6,0)
+```
+
+Create the model:
+
+```{r}
+toe.spline <-  gls(response ~ treat*time + treat*t6, data = toe, corr=corSymm(form= ~ timef| id), weights = varIdent(form = ~ 1 | time))
+```
+
+```{r}
+summary(toe.spline)
+```
+
+```{r}
+intervals(toe.spline, level = 0.95)
+```
+
+## Hypothesis Tests
+
+### 1) Slope for controls =<6 months
+
+Looking at the equations above, we see that the slope for the control group for times up to 6 months is $\beta_2$; therefore we will test $H_0: \beta_2 = 0$:
+
+```{r}
+s1 = c(0,0,1,0,0,0)
+anova(toe.spline, L = s1)
+```
+
+The point estimate and 95% CI for $\beta_2$ is 0.945 (0.845,1.046); this along with the hypothesis test above shows a significant slope for controls up to and including time 6 months. 
+
+### 2) Slope for controls > 6 months
+
+Looking at the equations above, we see that the slope for the control group for times after 6 months is $\beta_2 + \beta_3$; therefore we will test $H_0: \beta_2 + \beta_3 = 0$:
+
+```{r}
+s2 = c(0,0,1,1,0,0)
+anova(toe.spline, L = s2)
+```
+
+For 95% CI testing (credit to Austin Thompson for this chunk of code):
+
+```{r}
+e <- esticon(toe.spline, s2, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+The point estimate and 95% CI for $\beta_2 + \beta_3$ is 0.157 (0.0425, 0.273); this along with the hypothesis test above shows a significant slope for controls after time 6 months. 
+
+### 3) Slope for treatment group  =<6 months
+
+Looking at the equations above, we see that the slope for thetreatment group for times up to and including 6 months is $\beta_2 + \beta_{12}$; therefore we will test $H_0: \beta_2 + \beta_{12} = 0$:
+
+```{r}
+s3 = c(0,0,1,0,1,0)
+anova(toe.spline, L = s3)
+```
+
+For 95% CI testing (credit to Austin Thompson for this chunk of code):
+
+```{r}
+e <- esticon(toe.spline, s3, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+The point estimate and 95% CI for $\beta_2 + \beta_3$ is 0.925 (0.827, 1.023); this along with the hypothesis test above shows a significant slope for the treatment group up to and including time 6 months.
+
+### 4) Slope for treatment group >6
+
+Looking at the equations above, we see that the slope for the treatment group for times after 6 months is $\beta_2 +\beta_3 + \beta_{12} + \beta_{13}$; therefore we will test $H_0: \beta_2 +\beta_3 + \beta_{12} + \beta_{13} = 0$:
+
+```{r}
+s4 = c(0,0,1,1,1,1)
+anova(toe.spline, L = s4)
+```
+
+For 95% CI testing (credit to Austin Thompson for this chunk of code):
+
+```{r}
+e <- esticon(toe.spline, s4, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+The point estimate and 95% CI for $\beta_2 +\beta_3 + \beta_{12} + \beta_{13}$ is 0.235 (0.125, 0.346); this along with the hypothesis test above shows a significant slope for the treatment group afterg time 6 months.
+
+### 5) If slope differs after 6 months for controls
+
+Looking at the equations above, we see that the slope for the control group differs by $\beta_3$ pre vs post 6 months; therefore we will test $H_0:\beta_3 = 0$:
+
+```{r}
+s5 = c(0,0,0,1,0,0)
+anova(toe.spline, L = s5)
+```
+
+For 95% CI testing (credit to Austin Thompson for this chunk of code):
+
+```{r}
+e <- esticon(toe.spline, s5, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+The point estimate and 95% CI for $\beta_3$ is -0.788 (-0.941, -0.636); this along with the hypothesis test above shows a significant value for this parameter, and thus a significant decrease in slope for the control group after 6 months.
+
+### 6) If slope differs after 6 months for treatment
+
+Looking at the equations above, we see that the slope for the treatment group differs by $\beta_3 + \beta_{13}$ pre vs post 6 months; therefore we will test $H_0:\beta_3 + \beta_{13} = 0$:
+
+```{r}
+s6 = c(0,0,0,1,0,1)
+anova(toe.spline, L = s6)
+```
+
+For 95% CI testing (credit to Austin Thompson for this chunk of code):
+
+```{r}
+e <- esticon(toe.spline, s6, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+The point estimate and 95% CI for $\beta_3$ is -0.690 (-0837, -0.543); this along with the hypothesis test above shows a significant value for this parameter, and thus a significant decrease in slope for the treatment group after 6 months.
+
+### 7) Overall treatment effect
+
+Looking at the equations above, we see that the overall treatment is given by $\beta_{12}$ & $\beta_{13}$ ; therefore we will test $H_0:\beta_{12} = \beta_{12} + \beta_{13} = 0$:
+
+```{r}
+s7.1 = c(0,0,0,0,1,0)
+s7.2 = c(0,0,0,0,1,1)
+anova(toe.spline, L = rbind(s7.1,s7.2))
+```
+
+For 95% CI testing (credit to Austin Thompson for this chunk of code):
+
+```{r}
+e <- esticon(toe.spline, s7.1, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+```{r}
+e <- esticon(toe.spline, s7.2, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+The point estimate and 95% CI for $\beta_{12}$ is -0.021 (-0.161, 0.120), and the point estimate and 95% CI for $\beta_{12} + \beta_{13}$ is 0.078 (-0.082, 0.238); this along with the hypothesis test above shows a non-significant value for this parameter, and thus there is no evidence of an overall treatment effect in this model.
+
+### 8) Treatment effect =< 6 months
+
+Looking at the equations above, we see that the treatment effect up to and including 6 months is given by $\beta_{12}$; therefore we will test $H_0:\beta_{12} = 0$:
+
+```{r}
+s8 = c(0,0,0,0,1,0)
+anova(toe.spline, L = s8)
+```
+
+For 95% CI testing (credit to Austin Thompson for this chunk of code):
+
+```{r}
+e <- esticon(toe.spline, s8, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+The point estimate and 95% CI for $\beta_{12}$ is -0.021 (-0.161, -0.120); this along with the hypothesis test above shows a non-significant value for this parameter, and thus a treatment effect before 6 months is not supported by this model.
+
+### 9) Treatment effect > 6 months
+
+Looking at the equations above, we see that the treatment effect up to and including 6 months is given by $\beta_{12} + \beta_{13}$; therefore we will test $H_0:\beta_{12} +\beta_{13} = 0$:
+
+```{r}
+s9 = c(0,0,0,0,1,1)
+anova(toe.spline, L = s9)
+```
+
+For 95% CI testing (credit to Austin Thompson for this chunk of code):
+
+```{r}
+e <- esticon(toe.spline, s9, beta0 = 0, conf.int = TRUE)
+e$estimate
+e$lwr
+e$upr
+```
+
+The point estimate and 95% CI for $\beta_{12} + \beta_{13}$ is 0.078 (-0.081, -0.238); this along with the hypothesis test above shows a non-significant value for this parameter, and thus a treatment effect after 6 months is not supported by this model.
+
+# d
+
+If you need to decide a best model that fits the data and evaluate the differences between the two groups, which model would you choose among a), b) and c)?
+
+We showed in part b that the quadratic model provided a better fit than the linear model; thus we can reject the linear model.  However, such a direct comparison with a type-3 test cannot be done between the quadratic model and the linear spline model because they are not nested.  We can however compare the AIC & BIC of each model.  For the quadratic model AIC & BIC are 9283.264 and	9327.439  respectively; for the linear spline model AIC & BIC are 7867.07 and	8054.814 respectively.  Based on these parameters the linear spline model, model c, fits better and should be chosen.

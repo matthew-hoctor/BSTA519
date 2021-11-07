@@ -62,18 +62,12 @@ For $k = 2,3,...7$.
 
 We can now perform the hypothesis test.  First we can create new factored variables for time and treatment category:
 
-, levels = c(0,1,2,3,6,9,12), labels = c(1,2,3,4,5,6,7)
-
 ```{r}
 toe$time.f <- factor(toe$time, levels = c(0,1,2,3,6,9,12), labels = c(1,2,3,4,5,6,7))
 toe$treat.f <- factor(toe$treat)
 toe$time <- as.numeric(toe$time)
 toe$timef <- as.numeric(toe$time.f)
 ```
-
-```{r}
-```
-
 
 Making the model:
 

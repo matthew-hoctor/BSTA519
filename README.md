@@ -11,6 +11,7 @@ A place to upload BSTA 519 homework
  * [HW3](https://matthew-hoctor.github.io/BSTA519/HW3): [assignment 3 pdf](https://github.com/matthew-hoctor/BSTA519/blob/main/BSTA519%20homework%203%20-%202021.pdf)
  * [HW4](https://matthew-hoctor.github.io/BSTA519/HW4): [assignment 4 pdf](https://github.com/matthew-hoctor/BSTA519/blob/main/BSTA519%20homework%204%20-%202021.pdf)
  * [HW5](https://matthew-hoctor.github.io/BSTA519/HW5): [assignment 5 pdf](https://github.com/matthew-hoctor/BSTA519/blob/main/BSTA519%20homework%202%202021.pdf)
+ * [HW5](https://matthew-hoctor.github.io/BSTA519/HW5): [assignment 5 pdf](https://github.com/matthew-hoctor/BSTA519/blob/main/BSTA519%20homework%206%20-%20Fall%202021.pdf)
  
 # Resources
 

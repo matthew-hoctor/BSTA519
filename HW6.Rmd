@@ -1,0 +1,497 @@
+---
+title: "Homework 6 - BSTA 519"
+author: "Matthew Hoctor"
+date: "11/16/2021"
+output:
+  html_document:
+    number_sections: no
+    theme: lumen
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+#library(CarletonStats)
+#library(pwr)
+#library(BSDA)
+#library(exact2x2)
+#library(car)
+#library(dvmisc)
+#library(emmeans)
+#library(gridExtra)
+#library(DescTools)
+#library(DiagrammeR)
+library(nlme)
+library(doBy)
+library(geepack)
+library(rje)
+```
+
+# Respiratory dataset
+
+Import the respiratory dataset:
+
+```{r}
+resp <- read_xls("Respiratory data HWK.xls", skip = 10)
+```
+
+Update unique id values for those in center 2:
+
+```{r}
+resp2 <- mutate(resp, id = id + 56*ifelse(center==2,1,0))
+```
+
+Create long-form dataset:
+
+```{r}
+resp_long <- pivot_longer(data = resp2, cols = c("baseline", "visit1", "visit2", "visit3", "visit4"), names_to = "time", values_to = "status")
+```
+
+Convert time variable to numeric:
+
+```{r}
+resp_long$time[resp_long$time == "baseline"] <- 0
+resp_long$time[resp_long$time == "visit1"] <- 1
+resp_long$time[resp_long$time == "visit2"] <- 2
+resp_long$time[resp_long$time == "visit3"] <- 3
+resp_long$time[resp_long$time == "visit4"] <- 4
+resp_long$time <- as.numeric(resp_long$time)
+```
+
+Create factors for gender:
+
+```{r}
+resp_long$gender <- factor(resp_long$gender)
+```
+
+Order gender with F as reference value:
+
+```{r}
+resp_long$gender <- relevel(resp_long$gender, ref = "F")
+```
+
+# a
+
+For each treatment group, calculate and plot the proportion of good respiratory status over time and describe the trend you see. Does the plot suggest a treatment effect?
+
+```{r}
+sp.resp <- ggplot(data = resp_long,
+                  mapping = aes(
+                    x = time, 
+                    y = status,
+                    colour = treatmnt,
+                    group = treatmnt
+                  )) +
+  geom_point() + 
+  geom_smooth(method = 'loess', se = FALSE) + 
+  scale_x_continuous("time") +
+  scale_y_continuous("status")
+
+sp.resp
+sp.resp + facet_grid(.~treatmnt)
+```
+
+These plots do strongly suggest a treatment effect, with very similar values at baseline and noticeably greater values in the active treatment arm afterwards.
+
+For each treatment group, calculate the proportion of good respiratory status by center, and by gender separately. Comment on whether these proportions would give you some idea of whether the treatment effect differs by center, or by gender.
+
+```{r}
+resp_mean <- resp_long %>%
+  group_by(treatmnt, center, gender) %>%
+  summarise(RespStatus = mean(status))
+
+resp_mean
+```
+
+This suggests that those at center 2 may have a greater treatment effect than those at center 1, and that males may have a greater treatment effect than females.
+
+# b
+
+## Initial Model Building (unstructured working correlation matrix)
+
+The primary research question is to determine whether the treatment works better than the placebo to improve respiratory status. Using GEE method and an unstructured working correlation matrix (and pay attention to the ID variable), fit a marginal logistic regression model with treatment group, time as a discrete variable and interaction term between group and time (like a response profile analysis). In this analysis, treat baseline respiratory status as part of the repeated measures of outcome. 
+
+```{r}
+resp.gee <- geeglm(
+  status ~ treatmnt * time,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp.gee)
+```
+
+## Initial Model Interpretation
+
+Write out your model and calculate the predicted probability of good respiratory status at each visit (including baseline) for each group and compare these probabilities with the results you get in a). Provide an estimate of treatment effect at each visit (including baseline) and interpret your estimates.
+
+We can write out the model calculated above as:
+
+$$\mbox{logit}(\mathbb{P}(Y_{ij} = 1)) = \beta_0 + \beta_1 \mbox{treatment}_i + \beta_2 \mbox{time}_{ij} + \beta_{12}\mbox{treatment}_i \times \mbox{time}_{ij} + \varepsilon_{ij}$$
+
+Therefore we can find $\mathbb{P}(Y_{ij} = 1)$ by taking the expit of both sides:
+
+$$\mathbb{P}(Y_{ij} = 1) = \mbox{expit} ( \beta_0 + \beta_1 \mbox{treatment}_i + \beta_2 \mbox{time}_{ij} + \beta_{12}\mbox{treatment}_i \times \mbox{time}_{ij} + \varepsilon_{ij})$$
+
+We can use this formula and the beta-coefficients found above to calculate the predicted probability of good respiratory status at each visit (including baseline) for each group:
+
+```{r}
+gee.pred <- matrix(data = NA, nrow = 2, ncol = 5)
+B0 <- 0.27605
+B1 <- -0.47713
+B2 <- 0.13302
+B12 <- -0.14677
+
+for (time in 0:4) {
+  gee.pred[1,time+1] <- expit(B0 + 0*B1 + B2*time + 0*B12*time)
+  gee.pred[2,time+1] <- expit(B0 + 1*B1 + B2*time + 1*B12*time)
+}
+
+gee.pred.df <- data.frame(data = gee.pred, row.names = c("Active", "Placebo"))
+names(gee.pred.df)[names(gee.pred.df)=="data.1"] <- "t0"
+names(gee.pred.df)[names(gee.pred.df)=="data.2"] <- "t1"
+names(gee.pred.df)[names(gee.pred.df)=="data.3"] <- "t2"
+names(gee.pred.df)[names(gee.pred.df)=="data.4"] <- "t3"
+names(gee.pred.df)[names(gee.pred.df)=="data.5"] <- "t4"
+gee.pred.df
+
+sp.resp
+```
+
+We can compare the above plot to the predicted probabilities, and see that they are similar to those found in the plot; the treatment froup does not quite reach three quarters probability, and the placebo group stays roughly in the 0.45 range
+
+Based on above estimates comment on whether the treatment effect change over time. Does the treatment work better than the placebo to improve respiratory status? Answer the questions and interpret your results.
+
+To answer this question, we can borrow code from the week 8 lecture, using a 4x4 identity matrix to test the hypotheses that each coefficient is equal to zero:
+
+```{r}
+est <- esticon(resp.gee, diag(4))
+
+est$Lower.CI <- est$estimate - 1.96*est$std.error
+est$Upper.CI <- est$estimate + 1.96*est$std.error
+
+parm.CI <- cbind(est$estimate, est$Lower.CI, est$Upper.CI)
+rownames(parm.CI) <- names(coef(resp.gee))
+colnames(parm.CI) <- c("Beta", "Lower.beta", "Upper.beta")
+parm.CI
+```
+
+Based only on the results so far, the non-significant values for $\beta_1$ and $\beta_{12}$ (and the fact the the 95% CI overlaps the null in both cases) suggest that there is no difference between placebo and treatment; despite what we see in the plots, and despite the difference we see in predicted we do not detect a difference by this analysis.
+
+## Initial Model Building (exchangable working correlation matrix)
+
+Fit a marginal logistic regression model with treatment group, time as a discrete variable and interaction term between group and time but using the exchangeable working correlation matrix. Compared to the unstructured working correlation matrix, does the exchangeable working correlation matrix provide an adequate fit?
+
+We can first construct the model using the exchangeable working correlation matrix:
+
+```{r}
+resp.gee.ex <- geeglm(
+  status ~ treatmnt * time,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "exchangeable",
+  std.err="san.se"
+)
+
+summary(resp.gee.ex)
+```
+
+We can now compare the models:
+
+```{r}
+QIC(resp.gee)
+QIC(resp.gee.ex)
+```
+
+Although we see a slightly lower QIC for the first model with the unstructured correlation matrix, the difference is small and is unlikely to indicate a superior fit.
+
+# c
+
+In addition to the treatment effect, it is also of interest to determine whether the treatment effects differ by center, or gender. Using GEE method and an unstructured working correlation matrix, fit an appropriate marginal logistic regression model to answer this question.
+
+```{r}
+resp.gee2 <- geeglm(
+  status ~ treatmnt * time + treatmnt * center + treatmnt * gender,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp.gee2)
+```
+
+We can now test the hypotheses $H_0: \beta_7 = \beta_8 = 0$ (where $\beta_7$ is the coefficient for center-treatment interaction, and $\beta_8$ is the coefficient for gender-treatment interaction):
+
+```{r}
+center <- c(0,0,0,0,0,0,1,0)
+gender <- c(0,0,0,0,0,0,0,1)
+esticon(resp.gee2, L = rbind(center, gender), joint.test = TRUE)
+```
+
+```{r}
+esticon(resp.gee2, L = center)
+```
+
+```{r}
+esticon(resp.gee2, L = gender)
+```
+
+The interaction terms for gender is non-significant, however as we expected from our initial results the interaction term for center is significant; thus the treatment effect likely differs by center but not gender.
+
+# d
+
+Considering all independent variables (treatment group, time, center, gender and age), find a parsimonious model to describe the relationship between good respiratory status and these variables. That is, you can only consider the significant terms in the model, and provide appropriate interpretation for your results. For the purpose of building this model, consider: 1) whether treatment worked better than the placebo to improve respiratory status and whether the treatment effects changed over time; 2) for other variables including center, gender and age, only consider how they are associated with the outcome (as main effects). Write out your model and interpret your results.
+
+## Full model
+
+```{r}
+resp.gee.full <- geeglm(
+  status ~ treatmnt * time + treatmnt * center + treatmnt * gender + treatmnt * age,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp.gee.full)
+```
+
+##  subtraction 1
+
+From the above p-values we will note that, although the age coefficient is least significant, the age-treatment term is not least significant; we will create a model with out the age-center interaction term and compare QIC:
+
+```{r}
+resp.gee.1 <- geeglm(
+  status ~ treatmnt * time + center + treatmnt * gender + treatmnt * age,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp.gee.1)
+```
+
+We can now compare the models:
+
+```{r}
+QIC(resp.gee.full)
+QIC(resp.gee.1)
+```
+
+The QIC is slightly better in the reduced model; we can proceed from here.
+
+##  subtraction 2
+
+From the above p-values we will note that, although the age coefficient is again least significant, the age-treatment term is not least significant; we will create a model with out the age-gender interaction term and compare QIC:
+
+```{r}
+resp.gee.2 <- geeglm(
+  status ~ treatmnt * time + center + gender + treatmnt * age,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp.gee.2)
+```
+
+We can now compare the models:
+
+```{r}
+QIC(resp.gee.1)
+QIC(resp.gee.2)
+```
+
+The QIC is similar in the reduced model; we can proceed from here.
+
+##  subtraction 3
+
+From the above p-values we will note that, although the age coefficient is again least significant, the age-treatment term is not least significant; we will create a model with out the gender term and compare QIC:
+
+```{r}
+resp.gee.3 <- geeglm(
+  status ~ treatmnt * time + center + treatmnt * age,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp.gee.3)
+```
+
+We can now compare the models:
+
+```{r}
+QIC(resp.gee.2)
+QIC(resp.gee.3)
+```
+
+The QIC is slightly better in the reduced model; we can proceed from here.
+
+##  subtraction 4
+
+From the above p-values we will note that, although the age coefficient is again least significant, the age-treatment term is not least significant; we will create a model with out the treatment-time term and compare QIC:
+
+```{r}
+resp.gee.4 <- geeglm(
+  status ~ time + center + treatmnt * age,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp.gee.4)
+```
+
+We can now compare the models:
+
+```{r}
+QIC(resp.gee.3)
+QIC(resp.gee.4)
+```
+
+The QIC is similar in the reduced model; we can proceed from here.
+
+##  subtraction 5
+
+From the above p-values we will note that, although the age coefficient is again least significant, the age-treatment term is not least significant; we will create a model with out the time term and compare QIC:
+
+```{r}
+resp.gee.5 <- geeglm(
+  status ~ center + treatmnt * age,
+  data = resp_long,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp.gee.5)
+```
+
+We can now compare the models:
+
+```{r}
+QIC(resp.gee.4)
+QIC(resp.gee.5)
+```
+
+The QIC is similar in the reduced model; however we cannot remove any further terms without removing a significant term (age and treatment cannot be removed without removing the age-treatment interaction term).
+
+##  Model Intepretation
+
+After 5 rounds of deletion, the parsimonious model can be stated as:
+
+$$\mbox{logit}(\mathbb{P}(Y_{ij} = 1)) = \beta_0 + \beta_1 \mbox{treatment}_i + \beta_2 \mbox{age}_{ij} + \beta_3\mbox{center}_{ij} + \beta_{12}\mbox{treatment}_i \times \mbox{age}_{ij} + \varepsilon_{ij}$$
+
+This parsimonious model suggests several important implications:
+  1. Treatment worked better than placebo, and treatment effect increases with age.  Although the treatment term was not significant; the age-treatment interaction term was very significant.
+  2. There was a large difference in probability of favourable respiratory status dependent on treatment center.
+  3. The treatment effect was not time-dependent or gender-dependent.
+
+# e
+
+Instead of treating baseline respiratory status as part of the repeated measures of outcome, treat baseline respiratory status as a covariate and fit a similar response profile model as in b). That is, using the unstructured working correlation matrix, fit a marginal logistic regression model with treatment group, time as a discrete variable interaction term between group and time, and baseline respiratory status. You may also fit a simplified model by excluding the interaction term if the interaction term is not significant.
+
+In this case, how do you answer the question whether the treatment works better than the placebo to improve respiratory status? Interpret your results.
+
+## Dataset modification
+
+We can create a new long-form dataset with baseline respiratory status as a retained separate variable:
+
+```{r}
+resp_long2 <- pivot_longer(data = resp2, cols = c("visit1", "visit2", "visit3", "visit4"), names_to = "time", values_to = "status")
+```
+
+Convert time variable to numeric:
+
+```{r}
+resp_long2$time[resp_long2$time == "visit1"] <- 1
+resp_long2$time[resp_long2$time == "visit2"] <- 2
+resp_long2$time[resp_long2$time == "visit3"] <- 3
+resp_long2$time[resp_long2$time == "visit4"] <- 4
+resp_long2$time <- as.numeric(resp_long2$time)
+```
+
+Create factors for gender:
+
+```{r}
+resp_long2$gender <- factor(resp_long2$gender)
+```
+
+Order gender with F as reference value:
+
+```{r}
+resp_long2$gender <- relevel(resp_long2$gender, ref = "F")
+```
+
+## Response profile model
+
+We can now fit the model with  treatment group, time as a discrete variable interaction term between group and time, and baseline respiratory status:
+
+```{r}
+resp2.gee <- geeglm(
+  status ~ treatmnt * time + baseline,
+  data = resp_long2,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = id,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "unstructured",
+  std.err="san.se"
+)
+
+summary(resp2.gee)
+```
+
+To answer the question of if the treatment worked better than placebo to improve respiratory status, we can test if the treatment term is significant and/or if the treatment-time interaction is significant; i.e. $H_0: \beta_1 = \beta_{12} = 0$:
+
+```{r}
+treatment <- c(0,1,0,0,0)
+TT <- c(0,0,0,0,1)
+esticon(resp2.gee, L = rbind(treatment, TT), joint.test = TRUE)
+```
+
+Therefore the treatment works better than placebo to improve respiratory status.

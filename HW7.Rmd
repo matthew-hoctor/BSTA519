@@ -1,0 +1,347 @@
+---
+title: "Homework 7 - BSTA 519"
+author: "Matthew Hoctor"
+date: "11/16/2021"
+output:
+  html_document:
+    number_sections: no
+    theme: lumen
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+# library(readxl)
+library(tidyverse)
+library(ggplot2)
+# library(CarletonStats)
+# library(pwr)
+# library(BSDA)
+# library(exact2x2)
+# library(car)
+# library(dvmisc)
+# library(emmeans)
+# library(gridExtra)
+# library(DescTools)
+# library(DiagrammeR)
+# library(nlme)
+library(doBy)
+library(geepack)
+library(rje)
+library(lme4)
+library(GLMMadaptive)
+```
+
+# Fitzmaurice 14.1
+
+## Toenail dataset
+
+Import the toenail dataset:
+
+```{r}
+toe <- read.csv("toenail.txt", skip = 36, sep = " ")
+```
+
+Update column names
+
+```{r}
+colnames(toe) <- c("ID", "Response", "Treatment", "Month", "Visit")
+```
+
+## 14.1.1
+
+First, consider a marginal model for the log odds of moderate or severe onycholysis. Using GEE, fit a model that assumes linear trends for the log odds over time, with common intercept for the two treatment groups, but different slopes:
+
+$$\mbox{logit}(E[Y_{ij}]) = \beta_1 + \beta_2 \mbox{Month}_{ij} + \beta_3 \mbox{Treatment}_i \times  \mbox{Month}_{ij}$$
+
+Assume "exchangeable" log odds ratios (or "exchangeable" correlations, if available software does not permit the within-subject association to be parameterized in terms of log odds ratios) for the association among the repeated binary responses.
+
+First we will create a new variable for $\beta_3$:
+
+```{r}
+toe$TM <- toe$Treatment * toe$Month
+```
+
+Then we will compute the GEE model:
+
+```{r}
+toe.gee <- geeglm(
+  Response ~ Month + TM,
+  data = toe,
+  control = geese.control(epsilon = 0.0001, maxit = 100), # Changing these values from default does not change estimates. 
+  family = binomial(link = "logit"),
+  id = ID,
+  #waves = Occasion,   # Adding this option crash R running
+  corstr = "exchangeable",
+  std.err="san.se"
+)
+
+summary(toe.gee)
+```
+
+## 14.1.2
+
+What is the interpretation of $\beta_2$?
+
+As this is a marginal model, $\beta_2$ can be interpreted as the population-average change in log-odds probability of moderate or severe onycholysis per month, when $\mbox{Treatment}_i = 0$ (i.e. for the itraconazole-treated group).
+
+## 14.1.3
+
+What is the interpretation of $\beta_3$?
+
+As this is a marginal model, $\beta_3$ can be interpreted as the difference in population-average change in log-odds probability of moderate or severe onycholysis per month, when $\mbox{Treatment}_i = 1$ (i.e. the difference in the terbinafine-treated group compared to the itraconazole-treated group).
+
+## 14.1.4
+
+From the results of the analysis for Problem 14.1.1, what conclusions do you draw about the effect of treatment on changes in the log odds of moderate or severe onycholysis over time? Provide results that support your conclusions.
+
+To test if there is an effect of treatment with itraconazole we can test the null hypothesis $H_0: \beta_2 = 0$:
+
+```{r}
+B2 <- c(0,1,0)
+esticon(toe.gee, L = B2)
+```
+
+Therefore we can reject the null hypothesis; treatment with itraconazole produces a change in log odds of moderate or severe onycholysis over time.
+
+To test if there is an effect of treatment with terbinafine we can test the null hypothesis $H_0: \beta_2 + \beta_3 = 0$:
+
+```{r}
+B2B3 <- c(0,1,1)
+esticon(toe.gee, L = B2B3)
+```
+
+Therefore we can reject the null hypothesis; treatment with terbinafine produces a change in log odds of moderate or severe onycholysis over time.
+
+## 14.1.5
+
+Next consider a generalized linear mixed model, with randomly varying intercepts, for the patient-specific log odds of moderate or severe onycholysis. Using maximum likelihood (ML), fit a model with linear trends for the log odds over time and allow the slopes to depend on treatment group:
+
+$$\mbox{logit}(E[Y_{ij}]) = (\beta_1 + b_i) + \beta_2 \mbox{Month}_{ij} + \beta_3 \mbox{Treatment}_i \times  \mbox{Month}_{ij}$$
+
+Where $E[Y_{ij}] \sim \mbox{Bernoulli}(p)$ and $b_i \sim N(0, \sigma_b^2)$.
+
+To produce the model:
+
+```{r}
+toe.RI <- glmer(Response ~ Month + TM + (1|ID),
+                                 data = toe,
+                                 family = binomial(link = "logit"),
+                                 nAGQ = 30)
+```
+
+To report summary statistics:
+
+```{r}
+summary(toe.RI)
+confint(toe.RI, method = "Wald") 
+```
+
+
+## 14.1.6
+
+What is the estimate of $\sigma_b^2$?  Give an interpretation to the magnitude of the estimated variance?
+
+As reported in the above summary statistics, $\sigma_b^2 = 16$.  To interpret this finding, we can calculate the ICC:
+
+```{r}
+ICC <- 16 /(16 + pi^2/3 )
+ICC
+```
+
+By Koo and Li's guideline for interpretation of ICC, we can classify this value as "good".<sup>1</sup>  We can also use $\sigma_b^2$ to construct a 95% CI for the intercept:
+
+```{r}
+UB <- -1.6984 + 4*1.96
+UB
+LB <- -1.6984 - 4*1.96
+LB
+```
+
+Therefore 95% of subjects will have an intercept ($\beta_1 + b_i$) within (-9.54,6.14).
+
+## 14.1.7
+
+What is the interpretation of $\beta_2$?
+
+As this is a mixed-effects model, interpretation of $\beta_2$ is subject specific.  It can be interpreted as the change in log-odds probability of moderate or severe onycholysis per month, for a subject for whom $\mbox{Treatment}_i = 0$ (i.e. for a subject treated with itraconazole).
+
+## 14.1.8
+
+What is the interpretation of $\beta_3$?
+
+As this is a mixed-effects model, interpretation of $\beta_3$ is subject specific.  It can be interpreted as the difference in change in log-odds probability of moderate or severe onycholysis per month, for a subject for a subject treated with terbinafine  (i.e. $\mbox{Treatment}_i = 1$) compared to if that subject had been treated with itraconazole.
+
+## 14.1.9
+
+Compare and contrast estimates of $\beta_3$ from the marginal and mixed effects models. Why might they differ?
+
+$\beta_3$ from the marginal effects model is -0.0763; whereas $\beta_3$ from the mixed effects model is -0.1408.  As we can see, the absolute value of $\beta_3$ from the mixed effects model is greater than that of the marginal effects model (as are $\beta_1$ and $\beta_2$).  We generally expect these values to be greater in the mixed effects model because we woule expect the within-subject change (reported by the mixed effects model) to be greater than the within-group change (reported by the marginal model).
+
+## 14.1.10
+
+Repeat the analysis from Problem 14.1.5 sequentially increasing the number of quadrature points used. Compare the estimates and standard errors of the model parameters when the number of quadrature points is 2, 5, 10, 20, 30, and 50. Do the results depend on the number of quadrature points?
+
+2 Quadriture Points
+
+```{r}
+toe.RI.2 <- glmer(Response ~ Month + TM + (1|ID),
+                                 data = toe,
+                                 family = binomial(link = "logit"),
+                                 nAGQ = 2)
+```
+
+5 Quadriture Points
+
+```{r}
+toe.RI.5 <- glmer(Response ~ Month + TM + (1|ID),
+                                 data = toe,
+                                 family = binomial(link = "logit"),
+                                 nAGQ = 5)
+```
+
+10 Quadriture Points
+
+```{r}
+toe.RI.10 <- glmer(Response ~ Month + TM + (1|ID),
+                                 data = toe,
+                                 family = binomial(link = "logit"),
+                                 nAGQ = 10)
+```
+
+20 Quadriture Points
+
+```{r}
+toe.RI.20 <- glmer(Response ~ Month + TM + (1|ID),
+                                 data = toe,
+                                 family = binomial(link = "logit"),
+                                 nAGQ = 20)
+```
+
+30 Quadriture Points
+
+```{r}
+toe.RI.30 <- glmer(Response ~ Month + TM + (1|ID),
+                                 data = toe,
+                                 family = binomial(link = "logit"),
+                                 nAGQ = 30)
+```
+
+50 Quadriture Points
+
+```{r}
+toe.RI.50 <- glmer(Response ~ Month + TM + (1|ID),
+                                 data = toe,
+                                 family = binomial(link = "logit"),
+                                 nAGQ = 50)
+```
+
+Storing the summaries as objects:
+
+```{r}
+S2 <- summary(toe.RI.2)
+S5 <- summary(toe.RI.5)
+S10 <- summary(toe.RI.10)
+S20 <- summary(toe.RI.20)
+S30 <- summary(toe.RI.30)
+S50 <- summary(toe.RI.50)
+# S2$varcor
+# S2$coefficients
+# S2$logLik
+```
+
+### Comparing Parameters
+
+```{r}
+2
+S2$coefficients
+5
+S5$coefficients
+10
+S10$coefficients
+20
+S20$coefficients
+30
+S30$coefficients
+50
+S50$coefficients
+```
+
+As we can see from the above output,the results do indeed depend to some extent on the number of quadriture points used.  Furthermore, parameter estimates and standard errors stabilize after increasing the number of quadriture points to 20.
+
+## RIRS Model
+
+In addition to the questions from the textbook, fit a model with the same mean
+response as in 14.1.5, but with random intercepts and random slopes.
+
+We will fit the following model:
+
+$$\mbox{logit}(E[Y_{ij}]) = (\beta_1 + b_{1i}) + (\beta_2 + b_{2i}) \mbox{Month}_{ij} + \beta_3 \mbox{Treatment}_i \times  \mbox{Month}_{ij}$$
+
+Where $E[Y_{ij}] \sim \mbox{Bernoulli}(p)$, $b_{1i} \sim N(0, \sigma_{b_1}^2)$, and $b_{2i} \sim N(0, \sigma_{b_2}^2)$.  To produce the model we will use the mixed_model function, as it produces better results:
+
+```{r}
+toe.RIRS <- mixed_model(fixed = Response ~ Month + TM,
+                               random=~Month|ID,
+                               data=toe,
+                               family=binomial,
+                               nAGQ=20)
+```
+
+To report summary statistics:
+
+```{r}
+summary(toe.RIRS)
+confint(toe.RIRS, method = "Wald") 
+```
+
+### Treatment effect
+
+What conclusions do you draw about the effect of treatment on onycholysis? Provide results that support your conclusions.
+
+To test if there is an effect of treatment with itraconazole we can test the null hypothesis $H_0: \beta_2 = 0$.  The conventional method of using the esticon function does not work for the model produced by the mixed_model function, however we can see that the 95% confidence interval (-0.817 -0.473) does not include the null.  Therefore we can reject the null hypothesis; treatment with itraconazole produces a change in log odds of moderate or severe onycholysis over time.
+
+### Fit compared to RI model
+
+Does this model provide a better fit than the model with random intercepts only?
+
+We can compare the fit using a type 3 test:
+
+```{r}
+S.RIRS <- summary(toe.RIRS)
+S.RI <- summary(toe.RI)
+S.RIRS$logLik
+S.RIRS$AIC
+S.RIRS$BIC
+S.RI$AICtab
+LRstat <- -2*(-549 - -625)
+LRstat
+pchisq(LRstat, df = 1903-6)
+```
+
+The anova function does not worked for the model produced by the mixed_model function, but a manual liklihood ratio test shows that the RIRS model has a better fit (the lower AIC and BIC for this model support this as well).
+
+### Interpretation of Random Intercepts & Slopes
+
+Provide an interpretation to the magnitude of the estimated variance for the random intercepts and random slopes.
+
+$\sigma_{b_1}$ and $\sigma_{b_2}$ are not reported by the mixed_model function, but they can be interpreted similarly to the random-intercept model above; i.e. they can be used to calculate ICCs and 95% confidence intervals for individual-specific slopes and intercepts.
+
+# Extra Reading
+
+Points of interest learned from Hu et al.<sup>2</sup>:
+  * The conceptualization of the random effects in a random intercept model is clarified in this reading.  The authors describe the random intercept as creating a distribution of baseline risk ($e^{\beta_1 + v_i}$), which makes intuitive sense, as that it what typically occurs in a given population.
+  * The comparison of standard errors of time-varying covariates showed that models which don't account for the time-dependency over-estimate the standard error, whereas they can underestimate the standard error of time-invariate covariates.
+  * The discussion of differing assumptions regarding missingness for different models was interesting and practical.
+  * Equation 5, showing the relation between population-average and subject-specific coefficients, was interesting as it showed how the absolute values of subject-specific coefficients will be greater than those of population averages.
+
+# References
+
+1. Koo TK, Li MY. A Guideline of Selecting and Reporting Intraclass Correlation Coefficients for Reliability Research. J Chiropr Med. 2016;15(2):155-163. doi:10.1016/j.jcm.2016.02.012
+2. Hu FB, Goldberg J, Hedeker D, Flay BR, Pentz MA. Comparison of Population-Averaged and Subject-Specific Approaches for Analyzing Repeated Binary Outcomes. American Journal of Epidemiology. 1998;147(7):694-703. doi:10.1093/oxfordjournals.aje.a009511
